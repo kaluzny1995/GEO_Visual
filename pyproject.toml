@@ -1,0 +1,61 @@
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = [
+    "logs",
+    "__pycache__",
+    ".idea",
+    ".tox",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # import sorting
+    "B",   # bugbear (likely bugs)
+    "UP",  # pyupgrade
+    "C4",  # comprehensions
+    "SIM", # simplify
+    "RUF", # ruff-specific
+]
+ignore = [
+    "SIM108", # ternary instead of if-else — often less readable
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"] # package re-exports
+"test/**" = ["B011"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+addopts = "-q"
+
+[tool.mypy]
+files = [
+    "app.py",
+    "error.py",
+    "model",
+    "provider",
+    "utils",
+]
+python_version = "3.11"
+warn_unused_configs = true
+show_error_codes = true
+
+[[tool.mypy.overrides]]
+module = [
+    "streamlit",
+    "streamlit.*",
+]
+ignore_missing_imports = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+]

@@ -1,0 +1,20 @@
+{
+  "app": {
+    "title": "GEO Visual",
+    "subtitle": "Interactive dashboards for the GEO geographic-data pipeline",
+    "page_icon": "🌍",
+    "layout": "wide",
+    "version": "0.1.0"
+  },
+  "database": {
+    "db_schema": "geo",
+    "connect_timeout": 10,
+    "pool_size": 5,
+    "max_overflow": 5,
+    "pool_recycle_seconds": 300,
+    "max_rows": 50000,
+    "statement_timeout_ms": 30000,
+    "cache_ttl_seconds": 300,
+    "cache_max_entries": 32
+  }
+}
