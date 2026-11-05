@@ -108,26 +108,33 @@ class TestSupabasePostgresProvider:
         with pytest.raises(ValueError, match="query must not be empty"):
             provider.read_dataframe("  ;  ")
 
-    def test_read_dataframe_rejects_non_positive_limits(self) -> None:
+    @pytest.mark.parametrize(
+        "kwargs, message",
+        [
+            pytest.param({"max_rows": 0}, "max_rows must be positive", id="max-rows-zero"),
+            pytest.param({"max_rows": -1}, "max_rows must be positive", id="max-rows-negative"),
+            pytest.param({"statement_timeout_ms": 0}, "statement_timeout_ms must be positive", id="timeout-zero"),
+            pytest.param({"statement_timeout_ms": -1}, "statement_timeout_ms must be positive", id="timeout-negative"),
+        ],
+    )
+    def test_read_dataframe_rejects_non_positive_limits(self, kwargs: dict[str, int], message: str) -> None:
         """Row caps and timeouts must be positive."""
         provider, _, _, _ = make_provider()
-        with pytest.raises(ValueError, match="max_rows must be positive"):
-            provider.read_dataframe("SELECT 1", max_rows=0)
-        with pytest.raises(ValueError, match="statement_timeout_ms must be positive"):
-            provider.read_dataframe("SELECT 1", statement_timeout_ms=0)
+        with pytest.raises(ValueError, match=message):
+            provider.read_dataframe("SELECT 1", **kwargs)
 
-    def test_read_scalar_returns_the_first_value(self) -> None:
-        """``read_scalar`` returns the first column of the first row."""
+    @pytest.mark.parametrize(
+        "frame, expected",
+        [
+            pytest.param(pd.DataFrame({"count": [42]}), 42, id="value"),
+            pytest.param(pd.DataFrame(), None, id="empty"),
+        ],
+    )
+    def test_read_scalar(self, frame: pd.DataFrame, expected: object) -> None:
+        """``read_scalar`` returns the first value, or ``None`` for no rows."""
         provider, _, _, _ = make_provider()
-        frame = pd.DataFrame({"count": [42]})
         with patch(f"{PROVIDER_MODULE}.pd.read_sql_query", return_value=frame):
-            assert provider.read_scalar("SELECT COUNT(*) AS count FROM geo.union_etl") == 42
-
-    def test_read_scalar_returns_none_for_an_empty_result(self) -> None:
-        """``read_scalar`` returns ``None`` when the query has no rows."""
-        provider, _, _, _ = make_provider()
-        with patch(f"{PROVIDER_MODULE}.pd.read_sql_query", return_value=pd.DataFrame()):
-            assert provider.read_scalar("SELECT COUNT(*) AS count FROM geo.union_etl") is None
+            assert provider.read_scalar("SELECT COUNT(*) AS count FROM geo.union_etl") == expected
 
     def test_list_tables_inspects_the_requested_schema(self) -> None:
         """``list_tables`` passes the schema to SQLAlchemy's inspector."""

@@ -24,6 +24,25 @@ VALID_ENV = {
     "SUPABASE_DB_NAME": "postgres",
 }
 
+URL_CASES = [
+    pytest.param(
+        VALID_CONFIG,
+        "postgresql+psycopg://user:pass@db.example.com:5432/postgres?sslmode=require",
+        id="plain-credentials",
+    ),
+    pytest.param(
+        {
+            "username": "postgres.ref",
+            "password": "p@ss/w:rd",
+            "host": "db.example.com",
+            "port": 6543,
+            "database": "postgres",
+        },
+        "postgresql+psycopg://postgres.ref:p%40ss%2Fw%3Ard@db.example.com:6543/postgres?sslmode=require",
+        id="special-characters",
+    ),
+]
+
 
 @pytest.fixture
 def env_config(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -66,16 +85,28 @@ class TestSupabaseConnectionConfig:
         for name in VALID_ENV:
             assert name in str(exc_info.value)
 
-    def test_from_env_missing_single_var(self, env_config: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    @pytest.mark.parametrize("missing_name", VALID_ENV)
+    def test_from_env_missing_single_var(
+        self,
+        env_config: None,
+        monkeypatch: pytest.MonkeyPatch,
+        missing_name: str,
+    ) -> None:
         """``from_env`` fails when one required variable is deleted."""
-        monkeypatch.delenv("SUPABASE_DB_PASSWORD")
-        with pytest.raises(ValueError, match=r"Missing Supabase credentials: SUPABASE_DB_PASSWORD\b"):
+        monkeypatch.delenv(missing_name)
+        with pytest.raises(ValueError, match=rf"Missing Supabase credentials: {missing_name}\b"):
             SupabaseConnectionConfig.from_env()
 
-    def test_from_env_empty_value_counts_as_missing(self, env_config: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    @pytest.mark.parametrize("empty_name", VALID_ENV)
+    def test_from_env_empty_value_counts_as_missing(
+        self,
+        env_config: None,
+        monkeypatch: pytest.MonkeyPatch,
+        empty_name: str,
+    ) -> None:
         """An empty variable value counts as missing."""
-        monkeypatch.setenv("SUPABASE_DB_PASSWORD", "")
-        with pytest.raises(ValueError, match=r"Missing Supabase credentials: SUPABASE_DB_PASSWORD\b"):
+        monkeypatch.setenv(empty_name, "")
+        with pytest.raises(ValueError, match=rf"Missing Supabase credentials: {empty_name}\b"):
             SupabaseConnectionConfig.from_env()
 
     def test_from_env_invalid_port(self, env_config: None, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -103,22 +134,8 @@ class TestSupabaseConnectionConfig:
         cfg = SupabaseConnectionConfig.from_env()
         assert cfg.host == "db.example.com"
 
-    def test_get_connection_url(self) -> None:
-        """``get_connection_url`` builds the psycopg URL with TLS."""
-        cfg = SupabaseConnectionConfig(**VALID_CONFIG)
-        assert cfg.get_connection_url() == (
-            "postgresql+psycopg://user:pass@db.example.com:5432/postgres?sslmode=require"
-        )
-
-    def test_get_connection_url_encodes_special_characters(self) -> None:
-        """Credentials with special characters are URL-encoded."""
-        cfg = SupabaseConnectionConfig(
-            username="postgres.ref",
-            password="p@ss/w:rd",
-            host="db.example.com",
-            port=6543,
-            database="postgres",
-        )
-        assert cfg.get_connection_url() == (
-            "postgresql+psycopg://postgres.ref:p%40ss%2Fw%3Ard@db.example.com:6543/postgres?sslmode=require"
-        )
+    @pytest.mark.parametrize("config, expected_url", URL_CASES)
+    def test_get_connection_url(self, config: dict[str, object], expected_url: str) -> None:
+        """``get_connection_url`` builds the psycopg URL with TLS and URL-encodes credentials."""
+        cfg = SupabaseConnectionConfig(**config)
+        assert cfg.get_connection_url() == expected_url

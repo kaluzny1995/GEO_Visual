@@ -32,35 +32,41 @@ class _ValidConfig:
         )
 
 
+CHECK_CONNECTION_CASES = [
+    pytest.param(_MissingConfig, None, False, "not configured", False, id="missing-credentials"),
+    pytest.param(_ValidConfig, None, True, "Connected to Supabase", True, id="connected"),
+    pytest.param(_ValidConfig, SQLAlchemyError("boom"), False, "Could not connect", True, id="connection-error"),
+]
+
+
 class TestCheckConnection:
     """Tests for :func:`check_connection`."""
 
-    def test_missing_credentials_are_reported_without_raising(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """A missing ``.env`` produces a friendly, non-fatal status."""
-        monkeypatch.setattr(database, "SupabaseConnectionConfig", _MissingConfig)
-        status = database.check_connection()
-        assert status.connected is False
-        assert "not configured" in status.message.lower()
-
-    def test_successful_connection(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """A reachable database produces a connected status."""
+    @pytest.mark.parametrize(
+        "config_stub, connect_error, expected_connected, expected_message, provider_called",
+        CHECK_CONNECTION_CASES,
+    )
+    def test_check_connection(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        config_stub: type,
+        connect_error: Exception | None,
+        expected_connected: bool,
+        expected_message: str,
+        provider_called: bool,
+    ) -> None:
+        """Each connection scenario becomes a short, non-fatal status."""
         provider = MagicMock()
-        monkeypatch.setattr(database, "SupabaseConnectionConfig", _ValidConfig)
+        if connect_error is not None:
+            provider.connect.side_effect = connect_error
+        monkeypatch.setattr(database, "SupabaseConnectionConfig", config_stub)
         monkeypatch.setattr(database, "get_provider", lambda: provider)
-        status = database.check_connection()
-        assert status.connected is True
-        assert status.message == "Connected to Supabase"
-        provider.connect.assert_called_once()
 
-    def test_connection_failure_is_reported_without_raising(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """A database error is logged and shown as a short status message."""
-        provider = MagicMock()
-        provider.connect.side_effect = SQLAlchemyError("boom")
-        monkeypatch.setattr(database, "SupabaseConnectionConfig", _ValidConfig)
-        monkeypatch.setattr(database, "get_provider", lambda: provider)
         status = database.check_connection()
-        assert status.connected is False
-        assert "Could not connect" in status.message
+
+        assert status.connected is expected_connected
+        assert expected_message in status.message
+        assert provider.connect.call_count == (1 if provider_called else 0)
 
 
 class TestCachedQuery:
