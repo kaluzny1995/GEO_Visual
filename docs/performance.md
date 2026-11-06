@@ -11,6 +11,9 @@ The app queries **views** in the `geo` schema, never GEO_ETL's base or `_etl`
 tables. Views are the dashboard's stable data contract: GEO_ETL can change the
 tables and ETL internals behind them without breaking page queries.
 
+In the GEO_E2E Compose stack the same provider runs inside the `geo_streamlit`
+image; its entrypoint writes `.env` from the Compose environment at startup.
+
 | Path | Hops | Strengths | Costs | Best for |
 |------|------|-----------|-------|----------|
 | **Direct Postgres** (chosen) | Streamlit → Supabase pooler → Postgres | One hop, full SQL, fast aggregation, no endpoint maintenance | DB credentials live in the app; heavy queries consume database resources | Internal analytical dashboards |

@@ -41,6 +41,8 @@ trade-offs and the guardrails that keep large result sets out of the Streamlit p
 - **Typed configuration** — Pydantic models for `config.json` and `SUPABASE_DB_*`
   environment variables
 - **Themed UI** — shared Streamlit theme in `.streamlit/config.toml`
+- **Dockerized deployment** — the `geo_streamlit` image in GEO_E2E serves the app on
+  port 8501, with Supabase credentials injected at runtime
 - **Dev tooling** — ruff (lint + format), mypy, pytest and tox
 - **Tests without a database** — mocked engine and Streamlit's `AppTest` cover the
   welcome page and data layer
@@ -61,7 +63,7 @@ trade-offs and the guardrails that keep large result sets out of the Streamlit p
 | Lint / format    | ruff >= 0.6                                 |
 | Type checking    | mypy >= 1.10                                |
 | Check runner     | tox >= 4.0                                  |
-| Environment      | Conda — `geo_visual_311`                    |
+| Environment      | Conda — `geo_visual_311`; Docker image `geo_streamlit` |
 
 ## Project Structure
 
@@ -94,9 +96,14 @@ GEO_Visual/
 └── tox.ini                                 # Isolated lint/test/typecheck environments
 ```
 
+The Docker image definition (`geo_streamlit`) lives in
+`GEO_E2E/docker/geo_streamlit/` because it builds from the sibling `GeographicData/`
+context.
+
 ## Prerequisites
 
 - **Conda** — for the Python 3.11 environment
+- **Docker + Docker Compose** — optional, for the `geo_streamlit` service in GEO_E2E
 - **Supabase credentials** — the same project used by GEO_ETL and GEO_API, provided
   through `.env` (never committed). A read-only role with `SELECT` on the dashboard
   views in the `geo` schema is recommended; see
@@ -119,6 +126,20 @@ streamlit run app.py
 Streamlit opens at <http://localhost:8501>. The welcome page renders without a
 database; the sidebar reports if Supabase is not configured.
 
+### Docker (GEO_E2E stack)
+
+GEO_Visual is also served by the `geo_streamlit` image in GEO_E2E. The container
+writes `GEO_Visual/.env` from the Compose `SUPABASE_DB_*` environment at startup, so
+no credentials are baked into the image:
+
+```bash
+cd ../GEO_E2E
+./up.sh -d --build geo_streamlit   # preflight (six repos + Supabase .env), then compose up
+```
+
+The dashboard is then available at <http://localhost:8501>. Override the host port with
+`GEO_VISUAL_HOST_PORT` in `GEO_E2E/.env`.
+
 ## Configuration
 
 ### Environment variables
@@ -136,7 +157,9 @@ the environment take precedence.
 | `SUPABASE_DB_NAME`      | Database name, typically `postgres`                      |
 
 Copy `.env.example` to `.env` and take the values from the Supabase dashboard:
-**Project → Connect → Connection pooling → Transaction pooler**.
+**Project → Connect → Connection pooling → Transaction pooler**. In the Docker
+`geo_streamlit` service, the entrypoint writes this `.env` at container start from the
+Compose environment, so credentials are never baked into an image layer.
 
 ### `config.json`
 
@@ -229,5 +252,6 @@ GEO_Visual is one layer of the GIS data pipeline. The projects sit as siblings u
 - **[GEO_API](https://github.com/kaluzny1995/GEO_API)** — FastAPI REST layer over the
   same Supabase data.
 - **[GEO_E2E](https://github.com/kaluzny1995/GEO_E2E)** — Airflow and Docker Compose
-  orchestration for the pipeline.
+  orchestration for the pipeline; it also builds and runs this app as the
+  `geo_streamlit` service on port 8501.
 - **[GEO_APP](https://github.com/kaluzny1995/GEO_APP)** — React dashboard for the API.
