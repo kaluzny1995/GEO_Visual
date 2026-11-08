@@ -28,13 +28,34 @@ def test_tox_defines_the_quality_environments(env: str) -> None:
     assert f"[testenv:{env}]" in text
 
 
-@pytest.mark.parametrize("expected", ["streamlit run app.py", "SUPABASE_DB_USER"])
+@pytest.mark.parametrize("expected", ["streamlit run Start.py", "SUPABASE_DB_USER", "metrics_avalanche_vw"])
 def test_readme_documents_streamlit_and_supabase_setup(expected: str) -> None:
-    """The README explains how to run the app and configure Supabase."""
+    """The README explains how to run the app, configure Supabase and find the dashboard."""
     text = (ROOT / "README.md").read_text(encoding="utf-8")
     assert expected in text
 
 
-def test_streamlit_theme_is_committed() -> None:
-    """The shared Streamlit theme lives in ``.streamlit/config.toml``."""
-    assert (ROOT / ".streamlit" / "config.toml").is_file()
+def test_streamlit_theme_is_dark_and_committed() -> None:
+    """The shared Streamlit theme lives in ``.streamlit/config.toml`` and is dark."""
+    theme = (ROOT / ".streamlit" / "config.toml").read_text(encoding="utf-8")
+    assert 'base = "dark"' in theme
+    assert 'backgroundColor = "#0f172a"' in theme
+    assert 'textColor = "#e2e8f0"' in theme
+    assert "chartCategoricalColors" in theme
+
+
+@pytest.mark.parametrize(
+    "relative_path",
+    [
+        "pages/1_Avalanche_Timeline.py",
+        "dashboard/avalanche_timeline.py",
+        "dashboard/__init__.py",
+        "sql/avalanche_metrics_date_bounds.sql",
+        "sql/avalanche_metrics_timeline.sql",
+        "utils/layout.py",
+        "utils/sql.py",
+    ],
+)
+def test_first_dashboard_files_are_committed(relative_path: str) -> None:
+    """The avalanche timeline page, SQL scripts and shared helpers are part of the runtime."""
+    assert (ROOT / relative_path).is_file()

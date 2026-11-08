@@ -1,9 +1,22 @@
 [theme]
-base = "light"
-primaryColor = "#0f766e"
-backgroundColor = "#f8fafc"
-secondaryBackgroundColor = "#e2e8f0"
-textColor = "#0f172a"
+base = "dark"
+primaryColor = "#2dd4bf"
+backgroundColor = "#0f172a"
+secondaryBackgroundColor = "#1e293b"
+textColor = "#e2e8f0"
+linkColor = "#5eead4"
+codeBackgroundColor = "#020617"
+codeTextColor = "#e2e8f0"
+borderColor = "#334155"
+dataframeHeaderBackgroundColor = "#1e293b"
+chartCategoricalColors = [
+  "#2dd4bf",
+  "#fbbf24",
+  "#60a5fa",
+  "#fb7185",
+  "#a78bfa",
+  "#38bdf8",
+]
 font = "sans serif"
 
 [server]

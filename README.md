@@ -12,10 +12,13 @@ GEO_Visual is the presentation layer of the GIS data pipeline, sitting alongside
 the analysis-ready tables that GEO_ETL loads into Supabase (PostgreSQL) and turns them
 into interactive Streamlit pages.
 
-The repository currently ships a minimal welcome page (title and description)
-with a compact left sidebar for branding and Supabase connection status. Supabase
-connection helpers and performance guardrails are ready for the upcoming data
-exploration, mapping and data-quality pages.
+The repository ships a welcome page and the first dashboard page. The welcome
+page describes the project, shows Supabase connection status and links to the
+**Avalanche metrics timeline** dashboard, which turns the daily snapshots in
+`geo.metrics_avalanche_vw` into separate line charts, one per metric. Supabase
+connection helpers, a shared sidebar and performance guardrails are used by
+both pages and are ready for the remaining data exploration, mapping and
+data-quality pages.
 
 GEO_Visual reads directly from Supabase Postgres rather than routing analytical
 queries through GEO_API: one network hop, full SQL pushdown and no JSON
@@ -23,42 +26,63 @@ serialization. The app queries views in the `geo` schema only — base and `_etl
 tables remain owned by GEO_ETL. See [Performance](docs/performance.md) for the
 trade-offs and the guardrails that keep large result sets out of the Streamlit process.
 
-> Status: welcome page and Supabase connectivity are in place; dashboard pages are planned.
+> Status: welcome page, Supabase connectivity and the avalanche metrics timeline are in place.
 
 ## Features
 
-- **Streamlit welcome page** — title, short description and compact left sidebar
+- **Streamlit multipage app** — a welcome page with a dashboard card and the first
+  dashboard, sharing branding and a compact left sidebar
+- **Avalanche metrics timeline** — one Plotly line chart per metric from
+  `geo.metrics_avalanche_vw`, with a snapshot date range and mean, median,
+  maximum, total or observation-count statistics; every recorded value is
+  plotted, so the `danger_level = -1` (no rating) off-season snapshots stay
+  visible, every chart spans the selected timeline and missing periods are
+  shaded and labelled, and the mean view also shows the observed min-max band
+  across forecast zones
 - **Supabase connectivity** — SQLAlchemy 2.0 sync engine with the psycopg 3 driver,
   credentials from `.env`, TLS enforced and prepared statements disabled for the
   Supabase transaction pooler
 - **Views-only data contract** — dashboard queries read views in the `geo` schema,
   never GEO_ETL's base or `_etl` tables
+- **Parametrized SQL files** — dashboard queries live in `sql/*.sql` with named
+  bind parameters (`:start_date`, `:end_date`) and are loaded by `utils/sql.py`
 - **Connection helpers** — one pooled engine per Streamlit process (`st.cache_resource`),
   a cached connection status with a sidebar **Recheck connection** button, and a
-  bounded query cache ready for dashboard pages
+  bounded query cache shared by the dashboard pages
 - **Large-data guardrails** — every query has a row cap and a PostgreSQL statement
   timeout, and `cached_query()` caches only bounded, chart-sized results
 - **Typed configuration** — Pydantic models for `config.json` and `SUPABASE_DB_*`
   environment variables
-- **Themed UI** — shared Streamlit theme in `.streamlit/config.toml`
+- **Dark themed UI** — shared Streamlit dark theme in `.streamlit/config.toml`
+  with contrast-checked text, links, code blocks and a chart palette that stays
+  readable on the dark background
 - **Dockerized deployment** — the `geo_streamlit` image in GEO_E2E serves the app on
   port 8501, with Supabase credentials injected at runtime
 - **Dev tooling** — ruff (lint + format), mypy, pytest and tox
-- **Tests without a database** — mocked engine and Streamlit's `AppTest` cover the
-  welcome page and data layer
+- **Tests without a database** — mocked engine, chart builders and Streamlit's
+  `AppTest` cover the welcome page and the avalanche timeline
+
+## Dashboards
+
+- **Avalanche metrics timeline** — daily changes of `danger_level`, avalanche
+  `size` and any other metric published in `geo.metrics_avalanche_vw`. Each
+  metric is rendered as its own linear timeline. See
+  [Avalanche metrics timeline](docs/avalanche-timeline.md) for the query,
+  aggregation semantics and how the `danger_level = -1` (no rating) state is
+  included in the full snapshot range.
 
 ## Tech Stack
 
 | Component        | Technology                                  |
 |------------------|---------------------------------------------|
 | Language         | Python 3.11                                 |
-| UI framework     | Streamlit >= 1.37                           |
+| UI framework     | Streamlit >= 1.51                           |
 | Dataframes       | pandas >= 2.0                               |
 | Data access      | Direct PostgreSQL (Supabase) views, read-only role recommended |
 | Database         | PostgreSQL (Supabase) via SQLAlchemy 2.0    |
 | DB driver        | psycopg 3 (`psycopg[binary] >= 3.1`)        |
 | Configuration    | Pydantic >= 2.0, python-dotenv >= 1.0       |
-| Charting         | Plotly >= 5.20 (for upcoming dashboard pages) |
+| Charting         | Plotly >= 5.20                              |
 | Testing          | pytest >= 7.0, Streamlit `AppTest`          |
 | Lint / format    | ruff >= 0.6                                 |
 | Type checking    | mypy >= 1.10                                |
@@ -69,12 +93,21 @@ trade-offs and the guardrails that keep large result sets out of the Streamlit p
 
 ```text
 GEO_Visual/
-├── app.py                                  # Streamlit entry point and welcome page
+├── Start.py                                  # Streamlit entry point, welcome page and dashboard card
+├── pages/
+│   └── 1_Avalanche_Timeline.py             # First dashboard page (multipage app)
+├── dashboard/
+│   ├── __init__.py
+│   └── avalanche_timeline.py               # Avalanche aggregates and Plotly charts
+├── sql/
+│   ├── avalanche_metrics_date_bounds.sql   # Date picker bounds query
+│   └── avalanche_metrics_timeline.sql      # Parametrized timeline aggregate query
 ├── config.json                             # App metadata and database pool/query limits
 ├── error.py                                # QueryTooLargeError
 ├── .streamlit/
 │   └── config.toml                         # Shared Streamlit theme
 ├── docs/
+│   ├── avalanche-timeline.md               # Avalanche dashboard query and aggregation rules
 │   └── performance.md                      # Direct-Postgres rationale and views-only query rules
 ├── model/
 │   └── config/
@@ -84,13 +117,18 @@ GEO_Visual/
 │   └── supabase_postgres/
 │       └── supabase_postgres_provider.py   # Pooled engine, guarded queries and schema introspection
 ├── utils/
-│   └── database.py                         # Cached provider, status and cached_query()
+│   ├── database.py                         # Cached provider, status and cached_query()
+│   ├── layout.py                           # Shared page config, branding and sidebar
+│   └── sql.py                              # Loads sql/*.sql scripts
 ├── test/
+│   ├── dashboard/                          # Avalanche query, metric grouping and chart tests
 │   ├── model/config/                       # Config parsing and env loading
 │   ├── provider/supabase_postgres/         # Provider behavior with a mocked engine
 │   ├── test_app.py                         # Welcome page via Streamlit AppTest
+│   ├── test_avalanche_page.py              # Avalanche dashboard via Streamlit AppTest
 │   ├── test_database.py                    # Connection status handling
-│   └── test_project_layout.py              # Repository contract checks
+│   ├── test_project_layout.py              # Repository contract checks
+│   └── test_sql.py                         # SQL files, bind parameters and loader
 ├── environment.yml                         # Conda environment geo_visual_311
 ├── pyproject.toml                          # ruff, pytest and mypy settings
 └── tox.ini                                 # Isolated lint/test/typecheck environments
@@ -120,11 +158,14 @@ conda activate geo_visual_311
 cp .env.example .env
 
 # 3. Run the Streamlit app
-streamlit run app.py
+streamlit run Start.py
 ```
 
 Streamlit opens at <http://localhost:8501>. The welcome page renders without a
-database; the sidebar reports if Supabase is not configured.
+database; the sidebar reports if Supabase is not configured. Open **Avalanche
+metrics timeline** from the dashboard card on the welcome page (or the sidebar)
+to see the first dashboard. It reads `geo.metrics_avalanche_vw`; without
+credentials or data it shows an empty state instead of failing.
 
 ### Docker (GEO_E2E stack)
 
@@ -171,6 +212,15 @@ Compose environment, so credentials are never baked into an image layer.
 The provider enforces TLS (`sslmode=require`) and disables psycopg's prepared-statement
 cache (`prepare_threshold=None`). The Supabase transaction pooler multiplexes clients
 over one server connection, so cached statements can otherwise collide across clients.
+
+### Theme
+
+`.streamlit/config.toml` uses Streamlit's dark base with slate backgrounds, light text,
+teal links and a six-colour chart palette. The contrast ratios for body text, muted
+labels, links and chart lines are all above the WCAG AA threshold on the
+`#0f172a` background. Plotly figures use transparent backgrounds, light axis/title
+text, subtle light gridlines, dark hover cards and a bright categorical palette so
+the charts stay readable in the dark theme.
 
 ## Performance
 
@@ -225,15 +275,17 @@ thousands of files overflows the Linux inotify queue.
 ## Testing
 
 The suite is unit-focused: database calls are mocked, so no live Supabase connection
-or network access is required. `test/test_app.py` renders the real `app.py` through
-Streamlit's `AppTest` and checks that the main area contains only the title and
-description and that the sidebar exposes branding and connection status.
-Provider tests cover the row cap, statement timeout, scalar queries and engine
-options; `test/test_database.py` covers the cached query wrapper.
+or network access is required. `test/test_app.py` renders the real `Start.py` through
+Streamlit's `AppTest` and checks the welcome page; `test/test_avalanche_page.py`
+renders the dashboard page with patched data and checks its charts, KPIs, empty
+states and friendly error card. `test/dashboard/` covers the avalanche query
+parameters, metric grouping, aggregation columns and Plotly figures. Provider tests
+cover the row cap, statement timeout, scalar queries and engine options;
+`test/test_database.py` covers the cached query wrapper.
 
 ```bash
 pytest                 # full suite
-pytest test/model      # one area
+pytest test/dashboard  # one area
 pytest -q              # quiet
 ```
 

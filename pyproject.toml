@@ -37,7 +37,8 @@ addopts = "-q"
 
 [tool.mypy]
 files = [
-    "app.py",
+    "Start.py",
+    "dashboard",
     "error.py",
     "model",
     "provider",
@@ -49,6 +50,8 @@ show_error_codes = true
 
 [[tool.mypy.overrides]]
 module = [
+    "plotly",
+    "plotly.*",
     "streamlit",
     "streamlit.*",
 ]
