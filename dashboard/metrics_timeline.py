@@ -223,6 +223,70 @@ def _missing_date_runs(missing: pd.Series) -> list[tuple[pd.Timestamp, pd.Timest
     return runs
 
 
+def missing_observation_runs(
+    series: pd.DataFrame,
+    date_index: pd.DatetimeIndex,
+) -> list[tuple[pd.Timestamp, pd.Timestamp]]:
+    """Return the no-observation date runs for one metric.
+
+    Args:
+        series: Rows of a single metric from :func:`load_metric_timeline`.
+        date_index: Full timeline shared by all charts.
+
+    Returns:
+        One ``(start, end)`` pair per contiguous run of missing snapshots.
+    """
+    if series.empty:
+        return _missing_date_runs(pd.Series(True, index=date_index))
+    plot_frame = series.set_index("file_date").reindex(date_index)
+    return _missing_date_runs(plot_frame["observation_count"].isna())
+
+
+def format_missing_runs(runs: list[tuple[pd.Timestamp, pd.Timestamp]]) -> str | None:
+    """Format no-observation runs as a compact caption.
+
+    Args:
+        runs: Pairs returned by :func:`missing_observation_runs`.
+
+    Returns:
+        A caption such as ``No observations: 2026-10-03; 2026-10-07 to 2026-10-09.``,
+        or ``None`` when there are no gaps.
+    """
+    if not runs:
+        return None
+    periods = [f"{start:%Y-%m-%d}" if start == end else f"{start:%Y-%m-%d} to {end:%Y-%m-%d}" for start, end in runs]
+    return f"No observations: {'; '.join(periods)}."
+
+
+def _missing_vrect_bounds(
+    plot_frame: pd.DataFrame,
+    start: pd.Timestamp,
+    end: pd.Timestamp,
+) -> tuple[pd.Timestamp, pd.Timestamp]:
+    """Return shading bounds from the nearest observed snapshots.
+
+    Args:
+        plot_frame: Daily frame with the metric's observation counts.
+        start: First missing snapshot date.
+        end: Last missing snapshot date.
+
+    Returns:
+        Left and right x-coordinates for the no-data shading. The shading
+        touches the nearest observed marker on each side, or the axis edge
+        when there is no observed snapshot on that side.
+    """
+    axis_start = plot_frame.index.min() - pd.Timedelta(hours=12)
+    axis_end = plot_frame.index.max() + pd.Timedelta(hours=12)
+    observed = plot_frame.index[plot_frame["observation_count"].notna()]
+    if observed.empty:
+        return axis_start, axis_end
+    before = observed[observed < start]
+    after = observed[observed > end]
+    left = before[-1] if len(before) else axis_start
+    right = after[0] if len(after) else axis_end
+    return pd.Timestamp(left), pd.Timestamp(right)
+
+
 def build_metric_figure(
     series: pd.DataFrame,
     *,
@@ -245,7 +309,8 @@ def build_metric_figure(
 
     Returns:
         A Plotly line chart with one marker per snapshot date. Periods where
-        the metric has no observations are shaded and labelled.
+        the metric has no observations are shaded; the caller lists their
+        ranges below the chart.
     """
     plot_frame = series.sort_values("file_date").set_index("file_date")
     if date_index is None and not plot_frame.empty:
@@ -260,30 +325,27 @@ def build_metric_figure(
 
     figure = go.Figure()
     if show_band:
-        # A translucent band keeps the spread across forecast zones visible
-        # without adding a second chart for every metric.
-        figure.add_trace(
-            go.Scatter(
-                x=plot_frame.index,
-                y=plot_frame["max_value"],
-                mode="lines",
-                line={"width": 0},
-                hoverinfo="skip",
-                showlegend=False,
-            )
-        )
-        figure.add_trace(
-            go.Scatter(
-                x=plot_frame.index,
-                y=plot_frame["min_value"],
-                mode="lines",
-                line={"width": 0},
-                fill="tonexty",
-                fillcolor=_rgba(color, 0.18),
-                name="Observed min-max",
-                hoverinfo="skip",
-            )
-        )
+        # Draw one closed polygon per contiguous data segment. A two-trace
+        # fill would create triangular artifacts across gaps in sparse series.
+        valid = plot_frame["max_value"].notna() & plot_frame["min_value"].notna()
+        if valid.any():
+            groups = valid.ne(valid.shift(fill_value=False)).cumsum()
+            for index, (_, segment) in enumerate(plot_frame[valid].groupby(groups[valid])):
+                x_values = list(segment.index) + list(segment.index[::-1])
+                y_values = list(segment["max_value"]) + list(segment["min_value"][::-1])
+                figure.add_trace(
+                    go.Scatter(
+                        x=x_values,
+                        y=y_values,
+                        mode="lines",
+                        fill="toself",
+                        line={"width": 0},
+                        fillcolor=_rgba(color, 0.18),
+                        name="Observed min-max",
+                        showlegend=index == 0,
+                        hoverinfo="skip",
+                    )
+                )
 
     if has_data:
         figure.add_trace(
@@ -305,25 +367,13 @@ def build_metric_figure(
 
     missing = plot_frame["observation_count"].isna()
     for start, end in _missing_date_runs(missing):
-        period = f"{start:%Y-%m-%d}" if start == end else f"{start:%Y-%m-%d} to {end:%Y-%m-%d}"
-        run_end = end + pd.Timedelta(days=1)
-        unit_suffix = f" ({metric_unit})" if metric_unit else ""
+        x0, x1 = _missing_vrect_bounds(plot_frame, start, end)
         figure.add_vrect(
-            x0=start,
-            x1=run_end,
+            x0=x0,
+            x1=x1,
             fillcolor="rgba(148, 163, 184, 0.16)",
             line_width=0,
             layer="below",
-        )
-        figure.add_annotation(
-            text=f"No {metric_name.replace('_', ' ')}{unit_suffix} observations<br>{period}",
-            x=start + (run_end - start) / 2,
-            y=0.5,
-            xref="x",
-            yref="paper",
-            showarrow=False,
-            font={"size": 11, "color": "#cbd5e1"},
-            bgcolor="rgba(15, 23, 42, 0.90)",
         )
 
     if has_data:
@@ -507,6 +557,9 @@ def _render_charts(
             date_index=date_index,
         )
         st.plotly_chart(figure, width="stretch", key=f"metric-{index}")
+        missing_caption = format_missing_runs(missing_observation_runs(metric_frame, date_index))
+        if missing_caption:
+            st.caption(missing_caption)
 
 
 def _render_data(config: DashboardConfig, frame: pd.DataFrame) -> None:

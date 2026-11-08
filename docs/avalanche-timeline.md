@@ -109,9 +109,9 @@ GEO_ETL's base or `_etl` tables.
 - **All recorded values** — `danger_level = -1` (no rating) is plotted as a
   real state, so the full September–November snapshot range is visible. Every
   chart spans the selected date range; periods where a metric has no
-  observations are shaded and labelled with their dates. Avalanche `size`, for
-  example, shows a “No size (destructive size class) observations 2026-09-01 to 2026-10-30” band before
-  its first value instead of an unexplained empty lead-in.
+  observations are shaded, with their ranges listed in a compact caption below
+  the chart. Avalanche `size`, for example, is shaded before its first value
+  instead of showing an unexplained empty lead-in.
 - **KPIs** — snapshots, metrics, observations and the latest snapshot in the
   selected range.
 - **Aggregated data** — an expander shows the query result and offers a CSV

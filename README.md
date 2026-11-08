@@ -40,7 +40,7 @@ trade-offs and the guardrails that keep large result sets out of the Streamlit p
   maximum, total or observation-count statistics; every recorded value is
   plotted, so the `danger_level = -1` (no rating) off-season snapshots stay
   visible, every chart spans the selected timeline and missing periods are
-  shaded and labelled, and the mean view also shows the observed min-max band
+  shaded, with missing ranges listed below each chart, and the mean view also shows the observed min-max band
   across forecast zones
 - **Drought metrics timeline** — the same timeline engine over
   `geo.metrics_drought_vw`, covering drought `area` and any future numeric

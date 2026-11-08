@@ -47,8 +47,8 @@ All statistics aggregate every recorded value. The `Mean` view also draws a
 translucent observed min-max band across the events in each snapshot.
 
 Every chart spans the selected date range. Periods where a metric has no
-observations are shaded and labelled with their dates instead of being cut out
-or connected with a straight line. Drought snapshots are not published every
+observations are shaded instead of being cut out or connected with a straight line,
+with their ranges listed in a compact caption below the chart. Drought snapshots are not published every
 day, so gap shading is expected.
 
 ## Query
@@ -98,7 +98,7 @@ GEO_ETL's base or `_etl` tables.
 - **One chart per metric** — metrics are discovered from the returned rows, so
   a new numeric metric in the view appears without a code change.
 - **All recorded values** — every chart spans the selected date range; periods
-  where a metric has no observations are shaded and labelled with their dates.
+  where a metric has no observations are shaded, with their ranges listed below the chart; the grey field reaches the nearest observed snapshot on each side.
 - **KPIs** — snapshots, metrics, observations and the latest snapshot in the
   selected range.
 - **Aggregated data** — an expander shows the query result and offers a CSV

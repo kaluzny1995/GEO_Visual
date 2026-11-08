@@ -187,6 +187,19 @@ def test_page_renders_title_charts_and_filters(
         assert any(config.note in caption.value for caption in at.caption)
 
 
+def test_gap_caption_lists_missing_dates() -> None:
+    """A chart with a missing snapshot gets a compact caption listing the gap."""
+    frame = sample_frame((("danger_level", "NAPADS level"),)).iloc[[0]]
+    at = run_page(
+        avalanche_timeline.DASHBOARD,
+        frame=frame,
+        bounds=(dt.date(2026, 11, 1), dt.date(2026, 11, 2)),
+    )
+
+    assert not at.exception
+    assert any("No observations: 2026-11-02" in caption.value for caption in at.caption)
+
+
 @pytest.mark.parametrize("config", DASHBOARDS_UNDER_TEST)
 def test_sidebar_keeps_navigation_and_connection_status(
     config: metrics_timeline.DashboardConfig,

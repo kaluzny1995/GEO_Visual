@@ -45,7 +45,7 @@ All statistics aggregate every recorded value. The `Mean` view also draws a
 translucent observed min-max band across the events in each snapshot.
 
 Every chart spans the selected date range. Periods where a metric has no
-observations are shaded and labelled with their dates. This is expected for
+observations are shaded, with their ranges listed below the chart; the grey field reaches the nearest observed snapshot on each side. This is expected for
 sparse metrics such as volcano casualties, damage or iceberg geometry counts.
 
 ## SQL files
@@ -71,7 +71,7 @@ Every page has the same controls and layout:
 
 - **Snapshot range** — defaults to the full range in the view; inclusive.
 - **One chart per metric and unit** — metrics are discovered from the rows.
-- **Missing observations** — shaded and labelled on the full selected timeline.
+- **Missing observations** — shaded on the full selected timeline, with the grey field reaching the nearest observed snapshot on each side and the missing ranges listed below each chart.
 - **KPIs** — snapshots, metric series, observations and the latest snapshot.
 - **Aggregated data** — preview and CSV download.
 - **Empty and error states** — short messages instead of stack traces.

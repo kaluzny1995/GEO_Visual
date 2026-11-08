@@ -94,7 +94,7 @@ class TestBuildMetricFigure:
         )
 
         assert aggregation.column == column
-        assert len(figure.data) == (3 if has_band else 1)
+        assert len(figure.data) == (2 if has_band else 1)
         assert list(figure.data[-1].y) == expected_values
         assert figure.layout.yaxis.title.text == expected_y_title
         assert figure.layout.showlegend is has_band
@@ -103,7 +103,10 @@ class TestBuildMetricFigure:
         assert figure.layout.title.y == 0.98
         assert figure.layout.margin.t == 80
         if has_band:
-            assert figure.data[1].fill == "tonexty"
+            band = figure.data[0]
+            assert band.fill == "toself"
+            assert band.name == "Observed min-max"
+            assert len(band.x) == 4
             assert figure.data[-1].mode == "lines+markers"
             assert figure.data[-1].name == "Mean"
             assert figure.layout.title.text == "Danger Level (NAPADS level) · Mean"
@@ -122,14 +125,16 @@ class TestBuildMetricFigure:
         assert any("Observed 2026-11-01 to 2026-11-02" in annotation.text for annotation in figure.layout.annotations)
 
     def test_shared_date_index_keeps_the_full_timeline_and_marks_gaps(self) -> None:
-        """A metric that starts later stays on the full axis and its gap is labelled."""
+        """A metric that starts later stays on the full axis and its gap is shaded."""
+        series = sample_frame()
+        date_index = pd.date_range("2026-09-01", "2026-11-02", freq="D")
         figure = timeline.build_metric_figure(
-            sample_frame(),
+            series,
             metric_name="size",
             metric_unit="destructive size class",
             aggregation=timeline.AGGREGATIONS["mean"],
             color="#2dd4bf",
-            date_index=pd.date_range("2026-09-01", "2026-11-02", freq="D"),
+            date_index=date_index,
         )
 
         line = figure.data[-1]
@@ -137,11 +142,80 @@ class TestBuildMetricFigure:
         assert pd.isna(line.y[0])
         assert len(figure.layout.shapes) == 1
         assert figure.layout.shapes[0].fillcolor == "rgba(148, 163, 184, 0.16)"
-        assert any(
-            "No size (destructive size class) observations" in annotation.text
-            for annotation in figure.layout.annotations
+        assert timeline.format_missing_runs(timeline.missing_observation_runs(series, date_index)) == (
+            "No observations: 2026-09-01 to 2026-10-31."
         )
-        assert any("2026-09-01 to 2026-10-31" in annotation.text for annotation in figure.layout.annotations)
+
+    def test_sparse_metric_band_is_split_into_closed_polygons(self) -> None:
+        """The min-max band never bridges a no-data gap with a triangular fill."""
+        frame = pd.concat(
+            [
+                sample_frame(),
+                sample_frame().assign(file_date=pd.to_datetime(["2026-11-05", "2026-11-06"])),
+            ],
+            ignore_index=True,
+        )
+        figure = timeline.build_metric_figure(
+            frame,
+            metric_name="danger_level",
+            metric_unit="NAPADS level",
+            aggregation=timeline.AGGREGATIONS["mean"],
+            color="#2dd4bf",
+            date_index=pd.date_range("2026-11-01", "2026-11-06", freq="D"),
+        )
+
+        band_traces = [trace for trace in figure.data if trace.fill == "toself"]
+        assert len(band_traces) == 2
+        assert all(len(trace.x) == 4 for trace in band_traces)
+        assert not any(trace.fill == "tonexty" for trace in figure.data)
+
+    @pytest.mark.parametrize(
+        "dates, index_bounds, expected_x0, expected_x1",
+        [
+            pytest.param(
+                ["2026-11-01", "2026-11-04"],
+                ("2026-11-01", "2026-11-04"),
+                "2026-11-01",
+                "2026-11-04",
+                id="internal-gap",
+            ),
+            pytest.param(
+                ["2026-11-01", "2026-11-02"],
+                ("2026-10-30", "2026-11-02"),
+                "2026-10-29 12:00",
+                "2026-11-01",
+                id="leading-gap",
+            ),
+            pytest.param(
+                ["2026-11-01", "2026-11-02"],
+                ("2026-11-01", "2026-11-04"),
+                "2026-11-02",
+                "2026-11-04 12:00",
+                id="trailing-gap",
+            ),
+        ],
+    )
+    def test_gap_shading_touches_nearest_data_points(
+        self,
+        dates: list[str],
+        index_bounds: tuple[str, str],
+        expected_x0: str,
+        expected_x1: str,
+    ) -> None:
+        """The grey field reaches the adjacent markers instead of leaving blank slivers."""
+        frame = sample_frame().assign(file_date=pd.to_datetime(dates))
+        figure = timeline.build_metric_figure(
+            frame,
+            metric_name="danger_level",
+            metric_unit="NAPADS level",
+            aggregation=timeline.AGGREGATIONS["mean"],
+            color="#2dd4bf",
+            date_index=pd.date_range(*index_bounds, freq="D"),
+        )
+
+        shape = figure.layout.shapes[0]
+        assert pd.Timestamp(shape.x0) == pd.Timestamp(expected_x0)
+        assert pd.Timestamp(shape.x1) == pd.Timestamp(expected_x1)
 
     def test_full_metric_has_no_missing_shading(self) -> None:
         """A metric present on every snapshot needs no no-data marker."""
@@ -187,29 +261,39 @@ class TestBuildMetricFigure:
         assert len(y_values) == 4
         assert pd.isna(y_values[2])
         assert len(figure.layout.shapes) == 1
-        assert any(
-            "No danger level (NAPADS level) observations" in annotation.text for annotation in figure.layout.annotations
-        )
+        assert timeline.missing_observation_runs(frame, pd.date_range("2026-11-01", "2026-11-04", freq="D")) == [
+            (pd.Timestamp("2026-11-02"), pd.Timestamp("2026-11-03"))
+        ]
 
     def test_metric_without_any_data_marks_the_whole_timeline(self) -> None:
         """A metric with no observations gets a full-width no-data marker."""
         empty = sample_frame().iloc[0:0]
+        date_index = pd.date_range("2026-09-01", "2026-09-03", freq="D")
         figure = timeline.build_metric_figure(
             empty,
             metric_name="size",
             metric_unit="destructive size class",
             aggregation=timeline.AGGREGATIONS["mean"],
             color="#2dd4bf",
-            date_index=pd.date_range("2026-09-01", "2026-09-03", freq="D"),
+            date_index=date_index,
         )
 
         assert not figure.data
         assert len(figure.layout.shapes) == 1
-        assert any(
-            "No size (destructive size class) observations" in annotation.text
-            for annotation in figure.layout.annotations
+        assert timeline.format_missing_runs(timeline.missing_observation_runs(empty, date_index)) == (
+            "No observations: 2026-09-01 to 2026-09-03."
         )
-        assert any("2026-09-01 to 2026-09-03" in annotation.text for annotation in figure.layout.annotations)
+
+
+def test_format_missing_runs_lists_multiple_ranges() -> None:
+    """The caption squeezes several no-data ranges into one readable line."""
+    runs = [
+        (pd.Timestamp("2026-11-01"), pd.Timestamp("2026-11-01")),
+        (pd.Timestamp("2026-11-03"), pd.Timestamp("2026-11-04")),
+    ]
+
+    assert timeline.format_missing_runs(runs) == "No observations: 2026-11-01; 2026-11-03 to 2026-11-04."
+    assert timeline.format_missing_runs([]) is None
 
 
 @pytest.mark.parametrize(

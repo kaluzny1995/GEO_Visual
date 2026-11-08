@@ -56,7 +56,7 @@ as recorded. The `Mean` view also draws a translucent observed min-max band
 across the events in each snapshot.
 
 Every chart spans the selected date range. Periods where a metric has no
-observations are shaded and labelled with their dates. A configured sparse
+observations are shaded, with their ranges listed below the chart; the grey field reaches the nearest observed snapshot on each side. A configured sparse
 series such as `magnitude` in `mlr` is hidden entirely rather than rendered as
 one point and months of no-data shading.
 
@@ -108,7 +108,7 @@ GEO_ETL's base or `_etl` tables.
   rows, so a new numeric metric in the view appears without a code change.
   Explicitly configured sparse series are hidden from the charts and tables.
 - **All recorded values** — every chart spans the selected date range; periods
-  where a metric has no observations are shaded and labelled with their dates.
+  where a metric has no observations are shaded, with their ranges listed below the chart; the grey field reaches the nearest observed snapshot on each side.
 - **KPIs** — snapshots, metrics, observations and the latest snapshot in the
   selected range.
 - **Aggregated data** — an expander shows the query result and offers a CSV
