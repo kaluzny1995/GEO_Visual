@@ -3,7 +3,8 @@
 The drought dashboard follows daily drought metrics from the
 `geo.metrics_drought_vw` view. Every distinct metric gets its own linear
 timeline, using the same shared engine as the
-[Avalanche metrics timeline](avalanche-timeline.md).
+[Avalanche metrics timeline](avalanche-timeline.md) and
+[Earthquake metrics timeline](earthquake-timeline.md).
 
 Open it at **<http://localhost:8501> → Drought Timeline**, from the dashboard
 card on the welcome page, or via `pages/2_Drought_Timeline.py` in the source
@@ -116,9 +117,9 @@ GEO_ETL's base or `_etl` tables.
 | `sql/drought_metrics_date_bounds.sql` | Date picker bounds query |
 | `sql/drought_metrics_timeline.sql` | Parametrized timeline aggregate query |
 | `utils/sql.py` | Loads the checked-in `.sql` scripts |
-| `utils/layout.py` | Shared page configuration, custom Start/dashboard sidebar nav (branding + Supabase status) |
+| `utils/layout.py` | Shared page configuration, custom Start + collapsible Metric timelines sidebar nav (branding + Supabase status) |
 | `test/dashboard/test_metrics_timeline.py` | Shared engine, aggregation, figure, gap and band tests |
-| `test/dashboard/test_dashboard_configs.py` | Parametrized avalanche/drought configuration and query tests |
+| `test/dashboard/test_dashboard_configs.py` | Parametrized avalanche/drought/earthquake configuration and query tests |
 | `test/test_metrics_pages.py` | Parametrized page rendering, KPIs, empty states and error cards via `AppTest` |
 | `test/test_sql.py` | SQL file contents, bind parameters and loader behavior |
 

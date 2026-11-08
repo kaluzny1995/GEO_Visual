@@ -1,4 +1,4 @@
-"""Tests for the avalanche and drought dashboard configurations."""
+"""Tests for the avalanche, drought and earthquake dashboard configurations."""
 
 import datetime as dt
 from unittest.mock import patch
@@ -6,11 +6,12 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 
-from dashboard import avalanche_timeline, drought_timeline, metrics_timeline
+from dashboard import avalanche_timeline, drought_timeline, earthquake_timeline, metrics_timeline
 
 DASHBOARDS = [
     pytest.param(avalanche_timeline.DASHBOARD, id="avalanche"),
     pytest.param(drought_timeline.DASHBOARD, id="drought"),
+    pytest.param(earthquake_timeline.DASHBOARD, id="earthquake"),
 ]
 
 
@@ -29,6 +30,43 @@ def sample_frame() -> pd.DataFrame:
             "sum_value": [6.0, 12.0],
         }
     )
+
+
+def frame_for_metrics(metrics: tuple[tuple[str, str], ...]) -> pd.DataFrame:
+    """Build an aggregated frame with one two-row series per metric pair."""
+    frames = []
+    for metric_name, metric_unit in metrics:
+        frames.append(sample_frame().assign(metric_name=metric_name, metric_unit=metric_unit))
+    return pd.concat(frames, ignore_index=True)
+
+
+def test_earthquake_config_declares_the_hidden_mlr_scale() -> None:
+    """The sparse mlr magnitude scale is explicitly hidden in configuration."""
+    assert earthquake_timeline.DASHBOARD.hidden_metrics == (("magnitude", "mlr"),)
+
+
+def test_earthquake_hides_the_sparse_mlr_magnitude_series() -> None:
+    """The earthquake dashboard drops the one-observation mlr magnitude scale."""
+    frame = frame_for_metrics(
+        (
+            ("magnitude", "Mw"),
+            ("magnitude", "mlr"),
+            ("depth", "km"),
+            ("nst", "stations"),
+        )
+    )
+    with patch.object(metrics_timeline, "cached_query", return_value=frame):
+        result = metrics_timeline.load_metric_timeline(
+            earthquake_timeline.DASHBOARD,
+            dt.date(2026, 11, 1),
+            dt.date(2026, 11, 2),
+        )
+
+    assert set(metrics_timeline.metric_groups(result)) == {
+        ("magnitude", "Mw"),
+        ("depth", "km"),
+        ("nst", "stations"),
+    }
 
 
 @pytest.mark.parametrize("config", DASHBOARDS)

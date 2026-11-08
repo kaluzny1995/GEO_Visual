@@ -2,14 +2,17 @@
 
 import pytest
 
-from dashboard import avalanche_timeline, drought_timeline
+from dashboard import avalanche_timeline, drought_timeline, earthquake_timeline
 from dashboard.metrics_timeline import DashboardConfig
 from utils import sql
 
-DASHBOARD_CONFIGS = [
-    pytest.param(avalanche_timeline.DASHBOARD, id="avalanche"),
-    pytest.param(drought_timeline.DASHBOARD, id="drought"),
-]
+ALL_DASHBOARDS = (
+    avalanche_timeline.DASHBOARD,
+    drought_timeline.DASHBOARD,
+    earthquake_timeline.DASHBOARD,
+)
+
+DASHBOARD_CONFIGS = [pytest.param(config, id=config.key) for config in ALL_DASHBOARDS]
 
 SQL_FILE_CASES = [
     pytest.param(
@@ -17,7 +20,7 @@ SQL_FILE_CASES = [
         ("to_char(min(file_date)", "to_char(max(file_date)", config.view_name),
         id=f"{config.key}-date-bounds",
     )
-    for config in (avalanche_timeline.DASHBOARD, drought_timeline.DASHBOARD)
+    for config in ALL_DASHBOARDS
 ]
 SQL_FILE_CASES += [
     pytest.param(
@@ -31,7 +34,7 @@ SQL_FILE_CASES += [
         ),
         id=f"{config.key}-timeline",
     )
-    for config in (avalanche_timeline.DASHBOARD, drought_timeline.DASHBOARD)
+    for config in ALL_DASHBOARDS
 ]
 
 

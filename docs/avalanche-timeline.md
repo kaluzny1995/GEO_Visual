@@ -4,8 +4,8 @@ The first GEO_Visual dashboard follows daily avalanche metrics from the
 `geo.metrics_avalanche_vw` view. Every distinct metric gets its own linear
 timeline, so a change in `danger_level` is never mixed into the line for
 avalanche `size` or any future metric. It uses the shared
-`dashboard/metrics_timeline.py` engine; the drought dashboard uses the same
-engine with its own configuration and SQL files.
+`dashboard/metrics_timeline.py` engine; the drought and earthquake dashboards
+use the same engine with their own configurations and SQL files.
 
 Open it at **<http://localhost:8501> → Avalanche metrics timeline**, from the
 dashboard card on the welcome page, or via `pages/1_Avalanche_Timeline.py` in
@@ -110,7 +110,7 @@ GEO_ETL's base or `_etl` tables.
   real state, so the full September–November snapshot range is visible. Every
   chart spans the selected date range; periods where a metric has no
   observations are shaded and labelled with their dates. Avalanche `size`, for
-  example, shows a “No size observations 2026-09-01 to 2026-10-30” band before
+  example, shows a “No size (destructive size class) observations 2026-09-01 to 2026-10-30” band before
   its first value instead of an unexplained empty lead-in.
 - **KPIs** — snapshots, metrics, observations and the latest snapshot in the
   selected range.
@@ -130,9 +130,9 @@ GEO_ETL's base or `_etl` tables.
 | `sql/avalanche_metrics_date_bounds.sql` | Date picker bounds query |
 | `sql/avalanche_metrics_timeline.sql` | Parametrized timeline aggregate query |
 | `utils/sql.py` | Loads the checked-in `.sql` scripts |
-| `utils/layout.py` | Shared page configuration, custom Start/dashboard sidebar nav (branding + Supabase status) |
+| `utils/layout.py` | Shared page configuration, custom Start + collapsible Metric timelines sidebar nav (branding + Supabase status) |
 | `test/dashboard/test_metrics_timeline.py` | Parametrized aggregation, figure, gap and band tests |
-| `test/dashboard/test_dashboard_configs.py` | Parametrized avalanche/drought configuration and query tests |
+| `test/dashboard/test_dashboard_configs.py` | Parametrized avalanche/drought/earthquake configuration and query tests |
 | `test/test_metrics_pages.py` | Parametrized page rendering, KPIs, empty states and error cards via `AppTest` |
 | `test/test_sql.py` | SQL file contents, bind parameters and loader behavior |
 

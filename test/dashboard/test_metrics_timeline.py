@@ -47,6 +47,8 @@ class TestMetricGroups:
         pytest.param("danger_level", "NAPADS level", "Danger Level (NAPADS level)", id="with-unit"),
         pytest.param("size", None, "Size", id="without-unit"),
         pytest.param("area", "km²", "Area (km²)", id="drought-area"),
+        pytest.param("magnitude", "Mw", "Magnitude (Mw)", id="earthquake-magnitude"),
+        pytest.param("nst", "stations", "Nst (stations)", id="earthquake-stations"),
     ],
 )
 def test_metric_label(metric_name: str, metric_unit: str | None, expected: str) -> None:
@@ -90,6 +92,10 @@ class TestBuildMetricFigure:
         assert list(figure.data[-1].y) == expected_values
         assert figure.layout.yaxis.title.text == expected_y_title
         assert figure.layout.showlegend is has_band
+        assert figure.layout.title.x == 0.5
+        assert figure.layout.title.xanchor == "center"
+        assert figure.layout.title.y == 0.98
+        assert figure.layout.margin.t == 80
         if has_band:
             assert figure.data[1].fill == "tonexty"
             assert figure.data[-1].mode == "lines+markers"
@@ -125,7 +131,10 @@ class TestBuildMetricFigure:
         assert pd.isna(line.y[0])
         assert len(figure.layout.shapes) == 1
         assert figure.layout.shapes[0].fillcolor == "rgba(148, 163, 184, 0.16)"
-        assert any("No size observations" in annotation.text for annotation in figure.layout.annotations)
+        assert any(
+            "No size (destructive size class) observations" in annotation.text
+            for annotation in figure.layout.annotations
+        )
         assert any("2026-09-01 to 2026-10-31" in annotation.text for annotation in figure.layout.annotations)
 
     def test_full_metric_has_no_missing_shading(self) -> None:
@@ -172,7 +181,9 @@ class TestBuildMetricFigure:
         assert len(y_values) == 4
         assert pd.isna(y_values[2])
         assert len(figure.layout.shapes) == 1
-        assert any("No danger level observations" in annotation.text for annotation in figure.layout.annotations)
+        assert any(
+            "No danger level (NAPADS level) observations" in annotation.text for annotation in figure.layout.annotations
+        )
 
     def test_metric_without_any_data_marks_the_whole_timeline(self) -> None:
         """A metric with no observations gets a full-width no-data marker."""
@@ -188,7 +199,10 @@ class TestBuildMetricFigure:
 
         assert not figure.data
         assert len(figure.layout.shapes) == 1
-        assert any("No size observations" in annotation.text for annotation in figure.layout.annotations)
+        assert any(
+            "No size (destructive size class) observations" in annotation.text
+            for annotation in figure.layout.annotations
+        )
         assert any("2026-09-01 to 2026-09-03" in annotation.text for annotation in figure.layout.annotations)
 
 

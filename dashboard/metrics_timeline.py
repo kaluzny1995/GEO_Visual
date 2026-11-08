@@ -44,6 +44,8 @@ class DashboardConfig:
         timeline_query: Loaded SQL for the aggregated timeline.
         note_metric: Metric that must be present before ``note`` is shown.
         note: Optional caption explaining an encoded metric state.
+        hidden_metrics: ``(metric_name, metric_unit)`` pairs to omit from the
+            charts, KPIs and data table because they are too sparse to chart.
     """
 
     key: str
@@ -55,6 +57,7 @@ class DashboardConfig:
     timeline_query: str
     note_metric: str | None = None
     note: str | None = None
+    hidden_metrics: tuple[tuple[str, str | None], ...] = ()
 
 
 PALETTE: Final = ("#2dd4bf", "#fbbf24", "#60a5fa", "#fb7185", "#a78bfa", "#38bdf8")
@@ -131,7 +134,27 @@ def load_metric_timeline(config: DashboardConfig, start_date: dt.date, end_date:
     frame = frame.copy()
     frame["file_date"] = pd.to_datetime(frame["file_date"])
     frame["observation_count"] = frame["observation_count"].astype("int64")
-    return frame.sort_values(["file_date", "metric_name"], ignore_index=True)
+    frame = frame.sort_values(["file_date", "metric_name"], ignore_index=True)
+    return _drop_hidden_metrics(config, frame)
+
+
+def _drop_hidden_metrics(config: DashboardConfig, frame: pd.DataFrame) -> pd.DataFrame:
+    """Remove configured metric/unit pairs from the loaded timeline.
+
+    Args:
+        config: Dashboard configuration with the hidden pairs.
+        frame: Aggregated timeline frame.
+
+    Returns:
+        The frame without the hidden metric series.
+    """
+    if not config.hidden_metrics or frame.empty:
+        return frame
+    keep = pd.Series(True, index=frame.index)
+    for metric_name, metric_unit in config.hidden_metrics:
+        unit = "" if metric_unit is None else metric_unit
+        keep &= ~((frame["metric_name"] == metric_name) & (frame["metric_unit"].fillna("") == unit))
+    return frame[keep].reset_index(drop=True)
 
 
 def metric_groups(frame: pd.DataFrame) -> list[tuple[str, str | None]]:
@@ -276,6 +299,7 @@ def build_metric_figure(
     for start, end in _missing_date_runs(missing):
         period = f"{start:%Y-%m-%d}" if start == end else f"{start:%Y-%m-%d} to {end:%Y-%m-%d}"
         run_end = end + pd.Timedelta(days=1)
+        unit_suffix = f" ({metric_unit})" if metric_unit else ""
         figure.add_vrect(
             x0=start,
             x1=run_end,
@@ -284,7 +308,7 @@ def build_metric_figure(
             layer="below",
         )
         figure.add_annotation(
-            text=f"No {metric_name.replace('_', ' ')} observations<br>{period}",
+            text=f"No {metric_name.replace('_', ' ')}{unit_suffix} observations<br>{period}",
             x=start + (run_end - start) / 2,
             y=0.5,
             xref="x",
@@ -322,9 +346,15 @@ def build_metric_figure(
         ]
 
     figure.update_layout(
-        title={"text": f"{metric_label(metric_name, metric_unit)} · {aggregation.label}", "x": 0, "xanchor": "left"},
-        height=360,
-        margin={"l": 72, "r": 16, "t": 52, "b": 48},
+        title={
+            "text": f"{metric_label(metric_name, metric_unit)} · {aggregation.label}",
+            "x": 0.5,
+            "xanchor": "center",
+            "y": 0.98,
+            "yanchor": "top",
+        },
+        height=380,
+        margin={"l": 72, "r": 16, "t": 80, "b": 48},
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         font={"family": "sans serif", "size": 13, "color": "#e2e8f0"},
@@ -443,7 +473,7 @@ def _render_summary(frame: pd.DataFrame) -> None:
     latest = frame["file_date"].max().date()
     columns = st.columns(4)
     columns[0].metric("Snapshots", f"{frame['file_date'].nunique():,}")
-    columns[1].metric("Metrics", f"{frame['metric_name'].nunique():,}")
+    columns[1].metric("Metrics", f"{len(metric_groups(frame)):,}")
     columns[2].metric("Observations", f"{int(frame['observation_count'].sum()):,}")
     columns[3].metric("Latest snapshot", latest.isoformat())
 

@@ -54,6 +54,10 @@ def test_sidebar_has_branding_navigation_and_connection_status() -> None:
         "Start",
         *(dashboard.nav_label for dashboard in DASHBOARDS),
     ]
+    assert [expander.label for expander in at.sidebar.expander] == ["Metric timelines"]
+    assert [link.label for link in at.sidebar.expander[0].page_link] == [
+        dashboard.nav_label for dashboard in DASHBOARDS
+    ]
     assert at.sidebar.page_link[0].page == "app"
     assert any(button.label == "Recheck connection" for button in at.sidebar.button)
     assert any("not configured" in warning.value.lower() for warning in at.sidebar.warning)

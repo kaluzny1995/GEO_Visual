@@ -37,16 +37,17 @@ def render_sidebar() -> None:
             label="Start",
             icon="🌍",
         )
-        for dashboard in DASHBOARDS:
-            st.page_link(
-                st.Page(
-                    str(PROJECT_DIR / dashboard.page_path),
-                    title=dashboard.nav_label,
+        with st.expander("Metric timelines", expanded=True):
+            for dashboard in DASHBOARDS:
+                st.page_link(
+                    st.Page(
+                        str(PROJECT_DIR / dashboard.page_path),
+                        title=dashboard.nav_label,
+                        icon=dashboard.icon,
+                    ),
+                    label=dashboard.nav_label,
                     icon=dashboard.icon,
-                ),
-                label=dashboard.nav_label,
-                icon=dashboard.icon,
-            )
+                )
         st.divider()
 
         st.title(f"{CONFIG.app.page_icon} {CONFIG.app.title}")

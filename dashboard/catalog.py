@@ -51,4 +51,17 @@ DASHBOARDS: Final[tuple[DashboardCard, ...]] = (
             "labelled."
         ),
     ),
+    DashboardCard(
+        page_path="pages/3_Earthquake_Timeline.py",
+        nav_label="Earthquake Timeline",
+        title="Earthquake metrics timeline",
+        icon="🏚️",
+        description=(
+            "Daily snapshots from `geo.metrics_earthquake_vw`: magnitude, depth, station "
+            "counts and any other numeric metric published by GEO_ETL. Each metric gets "
+            "its own linear timeline, with a selectable date range and mean, median, "
+            "maximum, total or observation-count statistic. Periods without observations "
+            "are shaded and labelled."
+        ),
+    ),
 )

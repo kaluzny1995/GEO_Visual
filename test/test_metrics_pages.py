@@ -1,4 +1,4 @@
-"""AppTest rendering of the avalanche and drought metrics timeline pages."""
+"""AppTest rendering of the avalanche, drought and earthquake metrics timeline pages."""
 
 import datetime as dt
 from pathlib import Path
@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 from streamlit.testing.v1 import AppTest
 
-from dashboard import avalanche_timeline, drought_timeline, metrics_timeline
+from dashboard import avalanche_timeline, drought_timeline, earthquake_timeline, metrics_timeline
 from dashboard.catalog import DASHBOARDS
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,6 +16,7 @@ DEFAULT_BOUNDS = (dt.date(2026, 11, 1), dt.date(2026, 11, 2))
 PAGE_PATHS = {
     "avalanche": ROOT / "pages" / "1_Avalanche_Timeline.py",
     "drought": ROOT / "pages" / "2_Drought_Timeline.py",
+    "earthquake": ROOT / "pages" / "3_Earthquake_Timeline.py",
 }
 
 
@@ -45,16 +46,25 @@ def sample_frame(metrics: tuple[tuple[str, str], ...]) -> pd.DataFrame:
 FRAMES = {
     "avalanche": sample_frame((("danger_level", "NAPADS level"), ("size", "destructive size class"))),
     "drought": sample_frame((("area", "km²"),)),
+    "earthquake": sample_frame(
+        (
+            ("magnitude", "Mw"),
+            ("depth", "km"),
+            ("nst", "stations"),
+        )
+    ),
 }
 
 DASHBOARDS_UNDER_TEST = [
     pytest.param(avalanche_timeline.DASHBOARD, id="avalanche"),
     pytest.param(drought_timeline.DASHBOARD, id="drought"),
+    pytest.param(earthquake_timeline.DASHBOARD, id="earthquake"),
 ]
 
 DASHBOARD_CASES = [
     pytest.param(avalanche_timeline.DASHBOARD, 2, id="avalanche"),
     pytest.param(drought_timeline.DASHBOARD, 1, id="drought"),
+    pytest.param(earthquake_timeline.DASHBOARD, 3, id="earthquake"),
 ]
 
 
@@ -92,6 +102,8 @@ def test_page_renders_title_charts_and_filters(
     assert "Metrics" in metric_labels
     assert "Observations" in metric_labels
     assert "Latest snapshot" in metric_labels
+    metrics_by_label = {metric.label: metric.value for metric in at.metric}
+    assert metrics_by_label["Metrics"] == str(expected_charts)
     assert list(at.main.selectbox[0].options) == [
         "Mean",
         "Median",
@@ -116,6 +128,10 @@ def test_sidebar_keeps_navigation_and_connection_status(
 
     expected_labels = ["Start", *(dashboard.nav_label for dashboard in DASHBOARDS)]
     assert [link.label for link in at.sidebar.page_link] == expected_labels
+    assert [expander.label for expander in at.sidebar.expander] == ["Metric timelines"]
+    assert [link.label for link in at.sidebar.expander[0].page_link] == [
+        dashboard.nav_label for dashboard in DASHBOARDS
+    ]
     assert any(button.label == "Recheck connection" for button in at.sidebar.button)
     assert any("not configured" in warning.value.lower() for warning in at.sidebar.warning)
 
