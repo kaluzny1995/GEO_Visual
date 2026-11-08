@@ -46,9 +46,15 @@ class TestMetricGroups:
     [
         pytest.param("danger_level", "NAPADS level", "Danger Level (NAPADS level)", id="with-unit"),
         pytest.param("size", None, "Size", id="without-unit"),
-        pytest.param("area", "km²", "Area (km²)", id="drought-area"),
+        pytest.param("area", "km²", "Area (km²)", id="fire-and-drought-area"),
+        pytest.param("percent_contained", "%", "Percent Contained (%)", id="fire-percent-contained"),
         pytest.param("magnitude", "Mw", "Magnitude (Mw)", id="earthquake-magnitude"),
-        pytest.param("nst", "stations", "Nst (stations)", id="earthquake-stations"),
+        pytest.param("nst", "stations", "NST (stations)", id="earthquake-stations"),
+        pytest.param("wind speed", "km/h", "Wind Speed (km/h)", id="storm-wind-speed"),
+        pytest.param("surface", "N/m²", "Surface (N/m²)", id="iceberg-surface"),
+        pytest.param("dist2land", "km", "Distance to Land (km)", id="storm-dist2land"),
+        pytest.param("vei", "VEI", "VEI (VEI)", id="volcano-vei"),
+        pytest.param("vnum", "Smithsonian GVP", "Volcano Number (Smithsonian GVP)", id="volcano-vnum"),
     ],
 )
 def test_metric_label(metric_name: str, metric_unit: str | None, expected: str) -> None:

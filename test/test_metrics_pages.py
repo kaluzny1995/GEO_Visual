@@ -1,4 +1,4 @@
-"""AppTest rendering of the avalanche, drought and earthquake metrics timeline pages."""
+"""AppTest rendering of the natural-phenomenon metrics timeline pages."""
 
 import datetime as dt
 from pathlib import Path
@@ -8,7 +8,17 @@ import pandas as pd
 import pytest
 from streamlit.testing.v1 import AppTest
 
-from dashboard import avalanche_timeline, drought_timeline, earthquake_timeline, metrics_timeline
+from dashboard import (
+    avalanche_timeline,
+    drought_timeline,
+    earthquake_timeline,
+    fire_timeline,
+    flood_timeline,
+    iceberg_timeline,
+    metrics_timeline,
+    storm_timeline,
+    volcano_timeline,
+)
 from dashboard.catalog import DASHBOARDS
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,10 +27,15 @@ PAGE_PATHS = {
     "avalanche": ROOT / "pages" / "1_Avalanche_Timeline.py",
     "drought": ROOT / "pages" / "2_Drought_Timeline.py",
     "earthquake": ROOT / "pages" / "3_Earthquake_Timeline.py",
+    "fire": ROOT / "pages" / "4_Fire_Timeline.py",
+    "flood": ROOT / "pages" / "5_Flood_Timeline.py",
+    "iceberg": ROOT / "pages" / "6_Iceberg_Timeline.py",
+    "storm": ROOT / "pages" / "7_Storm_Timeline.py",
+    "volcano": ROOT / "pages" / "8_Volcano_Timeline.py",
 }
 
 
-def sample_frame(metrics: tuple[tuple[str, str], ...]) -> pd.DataFrame:
+def sample_frame(metrics: tuple[tuple[str, str | None], ...]) -> pd.DataFrame:
     """Two snapshots per metric, shaped like the dashboard query result."""
     rows = []
     for metric_name, metric_unit in metrics:
@@ -53,18 +68,71 @@ FRAMES = {
             ("nst", "stations"),
         )
     ),
+    "fire": sample_frame(
+        (
+            ("area", "km²"),
+            ("geometry_count", None),
+            ("percent_contained", "%"),
+        )
+    ),
+    "flood": sample_frame(
+        (
+            ("baseline_days", None),
+            ("discharge", "m³/s"),
+            ("exceedance_ratio", None),
+            ("magnitude", None),
+            ("threshold", "m³/s"),
+        )
+    ),
+    "iceberg": sample_frame(
+        (
+            ("geometry_count", None),
+            ("surface", "N/m²"),
+        )
+    ),
+    "storm": sample_frame(
+        (
+            ("direction", "degrees"),
+            ("dist2land", "km"),
+            ("geometry_count", None),
+            ("gust", "km/h"),
+            ("landfall", "km"),
+            ("pressure", "mb"),
+            ("speed", "km/h"),
+            ("wind speed", "km/h"),
+        )
+    ),
+    "volcano": sample_frame(
+        (
+            ("casualties", "people"),
+            ("damage", "million USD"),
+            ("magnitude", None),
+            ("vei", "VEI"),
+            ("vnum", "Smithsonian GVP"),
+        )
+    ),
 }
 
 DASHBOARDS_UNDER_TEST = [
     pytest.param(avalanche_timeline.DASHBOARD, id="avalanche"),
     pytest.param(drought_timeline.DASHBOARD, id="drought"),
     pytest.param(earthquake_timeline.DASHBOARD, id="earthquake"),
+    pytest.param(fire_timeline.DASHBOARD, id="fire"),
+    pytest.param(flood_timeline.DASHBOARD, id="flood"),
+    pytest.param(iceberg_timeline.DASHBOARD, id="iceberg"),
+    pytest.param(storm_timeline.DASHBOARD, id="storm"),
+    pytest.param(volcano_timeline.DASHBOARD, id="volcano"),
 ]
 
 DASHBOARD_CASES = [
     pytest.param(avalanche_timeline.DASHBOARD, 2, id="avalanche"),
     pytest.param(drought_timeline.DASHBOARD, 1, id="drought"),
     pytest.param(earthquake_timeline.DASHBOARD, 3, id="earthquake"),
+    pytest.param(fire_timeline.DASHBOARD, 3, id="fire"),
+    pytest.param(flood_timeline.DASHBOARD, 5, id="flood"),
+    pytest.param(iceberg_timeline.DASHBOARD, 2, id="iceberg"),
+    pytest.param(storm_timeline.DASHBOARD, 8, id="storm"),
+    pytest.param(volcano_timeline.DASHBOARD, 5, id="volcano"),
 ]
 
 

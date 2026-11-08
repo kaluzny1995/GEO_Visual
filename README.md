@@ -12,15 +12,14 @@ GEO_Visual is the presentation layer of the GIS data pipeline, sitting alongside
 the analysis-ready tables that GEO_ETL loads into Supabase (PostgreSQL) and turns them
 into interactive Streamlit pages.
 
-The repository ships a welcome page and three metrics dashboards. The welcome
-page describes the project, shows Supabase connection status and links to the
-**Avalanche metrics timeline**, **Drought metrics timeline** and **Earthquake
-metrics timeline** dashboards, which turn the daily snapshots in
-`geo.metrics_avalanche_vw`, `geo.metrics_drought_vw` and
-`geo.metrics_earthquake_vw` into separate line charts, one per metric. Supabase
-connection helpers, a shared sidebar and performance guardrails are used by
-every page and are ready for the remaining data exploration, mapping and
-data-quality pages.
+The repository ships a welcome page and eight natural-phenomenon metrics
+dashboards: avalanche, drought, earthquake, fire, flood, iceberg, storm and
+volcano. The welcome page describes the project, shows Supabase connection
+status and links to each dashboard, which turns the daily snapshots in the
+corresponding `geo.metrics_*_vw` view into separate line charts, one per
+metric. Supabase connection helpers, a shared sidebar and performance
+guardrails are used by every page and are ready for the remaining data
+exploration, mapping and data-quality pages.
 
 GEO_Visual reads directly from Supabase Postgres rather than routing analytical
 queries through GEO_API: one network hop, full SQL pushdown and no JSON
@@ -28,7 +27,7 @@ serialization. The app queries views in the `geo` schema only — base and `_etl
 tables remain owned by GEO_ETL. See [Performance](docs/performance.md) for the
 trade-offs and the guardrails that keep large result sets out of the Streamlit process.
 
-> Status: welcome page, Supabase connectivity, avalanche, drought and earthquake metrics timelines are in place.
+> Status: welcome page, Supabase connectivity and all eight natural-phenomenon metrics timelines are in place.
 
 ## Features
 
@@ -50,7 +49,12 @@ trade-offs and the guardrails that keep large result sets out of the Streamlit p
   `geo.metrics_earthquake_vw`, covering magnitude (`Mw`), depth, station counts
   and any future numeric earthquake metric; the one-observation `mlr` magnitude
   scale is hidden as too sparse to chart
-- **Shared timeline engine** — `dashboard/metrics_timeline.py` renders all three
+- **Fire, flood, iceberg, storm and volcano timelines** — the remaining
+  `geo.metrics_*_vw` views with the same filters, statistics, missing-period
+  shading and CSV export; fire, flood, storm and volcano charts expose all of
+  their published metric series, and iceberg surface/geometry series are shown
+  as well
+- **Shared timeline engine** — `dashboard/metrics_timeline.py` renders all eight
   dashboards; per-view configurations and SQL scripts keep the page code small
 - **Supabase connectivity** — SQLAlchemy 2.0 sync engine with the psycopg 3 driver,
   credentials from `.env`, TLS enforced and prepared statements disabled for the
@@ -91,6 +95,12 @@ trade-offs and the guardrails that keep large result sets out of the Streamlit p
   and any other numeric metric published in `geo.metrics_earthquake_vw`. See
   [Earthquake metrics timeline](docs/earthquake-timeline.md) for the view, SQL
   scripts and page behavior.
+- **Fire, flood, iceberg, storm and volcano timelines** — the remaining
+  natural-phenomenon views (`geo.metrics_fire_vw`, `geo.metrics_flood_vw`,
+  `geo.metrics_iceberg_vw`, `geo.metrics_storm_vw`, `geo.metrics_volcano_vw`)
+  with the same per-metric timelines and filters. See
+  [Fire, flood, iceberg, storm and volcano timelines](docs/phenomena-timelines.md)
+  for the current metric series and SQL files.
 
 ## Tech Stack
 
@@ -114,17 +124,27 @@ trade-offs and the guardrails that keep large result sets out of the Streamlit p
 
 ```text
 GEO_Visual/
-├── app.py                                  # Streamlit entry point, welcome page and dashboard card
+├── app.py                                  # Streamlit entry point, welcome page and dashboard cards
 ├── pages/
 │   ├── 1_Avalanche_Timeline.py             # Avalanche dashboard page
 │   ├── 2_Drought_Timeline.py               # Drought dashboard page
-│   └── 3_Earthquake_Timeline.py            # Earthquake dashboard page
+│   ├── 3_Earthquake_Timeline.py            # Earthquake dashboard page
+│   ├── 4_Fire_Timeline.py                  # Fire dashboard page
+│   ├── 5_Flood_Timeline.py                 # Flood dashboard page
+│   ├── 6_Iceberg_Timeline.py               # Iceberg dashboard page
+│   ├── 7_Storm_Timeline.py                 # Storm dashboard page
+│   └── 8_Volcano_Timeline.py               # Volcano dashboard page
 ├── dashboard/
 │   ├── __init__.py
 │   ├── metrics_timeline.py                 # Shared timeline engine and Plotly charts
 │   ├── avalanche_timeline.py               # Avalanche dashboard configuration
 │   ├── drought_timeline.py                 # Drought dashboard configuration
 │   ├── earthquake_timeline.py              # Earthquake dashboard configuration
+│   ├── fire_timeline.py                    # Fire dashboard configuration
+│   ├── flood_timeline.py                   # Flood dashboard configuration
+│   ├── iceberg_timeline.py                 # Iceberg dashboard configuration
+│   ├── storm_timeline.py                   # Storm dashboard configuration
+│   ├── volcano_timeline.py                 # Volcano dashboard configuration
 │   └── catalog.py                          # Dashboard metadata for welcome cards and navigation
 ├── sql/
 │   ├── avalanche_metrics_date_bounds.sql   # Avalanche date picker bounds query
@@ -132,7 +152,17 @@ GEO_Visual/
 │   ├── drought_metrics_date_bounds.sql     # Drought date picker bounds query
 │   ├── drought_metrics_timeline.sql        # Parametrized drought timeline query
 │   ├── earthquake_metrics_date_bounds.sql  # Earthquake date picker bounds query
-│   └── earthquake_metrics_timeline.sql     # Parametrized earthquake timeline query
+│   ├── earthquake_metrics_timeline.sql     # Parametrized earthquake timeline query
+│   ├── fire_metrics_date_bounds.sql        # Fire date picker bounds query
+│   ├── fire_metrics_timeline.sql           # Parametrized fire timeline query
+│   ├── flood_metrics_date_bounds.sql       # Flood date picker bounds query
+│   ├── flood_metrics_timeline.sql          # Parametrized flood timeline query
+│   ├── iceberg_metrics_date_bounds.sql     # Iceberg date picker bounds query
+│   ├── iceberg_metrics_timeline.sql        # Parametrized iceberg timeline query
+│   ├── storm_metrics_date_bounds.sql       # Storm date picker bounds query
+│   ├── storm_metrics_timeline.sql          # Parametrized storm timeline query
+│   ├── volcano_metrics_date_bounds.sql     # Volcano date picker bounds query
+│   └── volcano_metrics_timeline.sql        # Parametrized volcano timeline query
 ├── config.json                             # App metadata and database pool/query limits
 ├── error.py                                # QueryTooLargeError
 ├── .streamlit/
@@ -141,6 +171,7 @@ GEO_Visual/
 │   ├── avalanche-timeline.md               # Avalanche dashboard query and aggregation rules
 │   ├── drought-timeline.md                 # Drought dashboard query and aggregation rules
 │   ├── earthquake-timeline.md              # Earthquake dashboard query and aggregation rules
+│   ├── phenomena-timelines.md              # Fire, flood, iceberg, storm and volcano dashboards
 │   └── performance.md                      # Direct-Postgres rationale and views-only query rules
 ├── model/
 │   └── config/
@@ -158,7 +189,7 @@ GEO_Visual/
 │   ├── model/config/                       # Config parsing and env loading
 │   ├── provider/supabase_postgres/         # Provider behavior with a mocked engine
 │   ├── test_app.py                         # Welcome page via Streamlit AppTest
-│   ├── test_metrics_pages.py               # Avalanche, drought and earthquake pages via AppTest
+│   ├── test_metrics_pages.py               # All eight metrics timeline pages via AppTest
 │   ├── test_database.py                    # Connection status handling
 │   ├── test_project_layout.py              # Repository contract checks
 │   └── test_sql.py                         # SQL files, bind parameters and loader
@@ -196,11 +227,9 @@ streamlit run app.py
 
 Streamlit opens at <http://localhost:8501>. The welcome page renders without a
 database; the sidebar reports if Supabase is not configured. Open the
-**Avalanche metrics timeline**, **Drought metrics timeline** or **Earthquake
-metrics timeline** from the welcome cards (or the sidebar). They read
-`geo.metrics_avalanche_vw`, `geo.metrics_drought_vw` and
-`geo.metrics_earthquake_vw`; without credentials or data each page shows an
-empty state instead of failing.
+appropriate timeline from the welcome cards or the **Metric timelines** sidebar
+menu. Each dashboard reads its matching `geo.metrics_*_vw` view; without
+credentials or data the page shows an empty state instead of failing.
 
 ### Docker (GEO_E2E stack)
 
@@ -312,11 +341,11 @@ thousands of files overflows the Linux inotify queue.
 The suite is unit-focused: database calls are mocked, so no live Supabase connection
 or network access is required. `test/test_app.py` renders the real `app.py` through
 Streamlit's `AppTest` and checks the welcome page and every dashboard card;
-`test/test_metrics_pages.py` parametrizes the avalanche, drought and earthquake
+`test/test_metrics_pages.py` parametrizes all eight natural-phenomenon
 pages and checks their charts, KPIs, empty states and friendly error cards.
 `test/dashboard/test_metrics_timeline.py` covers the shared engine, chart builders
 and aggregation cases; `test/dashboard/test_dashboard_configs.py` parametrizes the
-three dashboard configurations and their SQL loading. Provider tests cover the row
+eight dashboard configurations and their SQL loading. Provider tests cover the row
 cap, statement timeout, scalar queries and engine options;
 `test/test_database.py` covers the cached query wrapper.
 

@@ -62,6 +62,14 @@ class DashboardConfig:
 
 PALETTE: Final = ("#2dd4bf", "#fbbf24", "#60a5fa", "#fb7185", "#a78bfa", "#38bdf8")
 
+#: Display names for abbreviations that should not be title-cased.
+METRIC_NAME_OVERRIDES: Final[dict[str, str]] = {
+    "dist2land": "Distance to Land",
+    "nst": "NST",
+    "vei": "VEI",
+    "vnum": "Volcano Number",
+}
+
 
 @dataclass(frozen=True)
 class Aggregation:
@@ -184,7 +192,7 @@ def metric_label(metric_name: str, metric_unit: str | None) -> str:
     Returns:
         ``Danger Level (NAPADS level)`` or just ``Danger Level``.
     """
-    label = metric_name.replace("_", " ").strip().title()
+    label = METRIC_NAME_OVERRIDES.get(metric_name, metric_name.replace("_", " ").strip().title())
     return f"{label} ({metric_unit})" if metric_unit else label
 
 

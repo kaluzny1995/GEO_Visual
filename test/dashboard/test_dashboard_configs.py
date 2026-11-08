@@ -1,4 +1,4 @@
-"""Tests for the avalanche, drought and earthquake dashboard configurations."""
+"""Tests for the natural-phenomenon dashboard configurations."""
 
 import datetime as dt
 from unittest.mock import patch
@@ -6,12 +6,27 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 
-from dashboard import avalanche_timeline, drought_timeline, earthquake_timeline, metrics_timeline
+from dashboard import (
+    avalanche_timeline,
+    drought_timeline,
+    earthquake_timeline,
+    fire_timeline,
+    flood_timeline,
+    iceberg_timeline,
+    metrics_timeline,
+    storm_timeline,
+    volcano_timeline,
+)
 
 DASHBOARDS = [
     pytest.param(avalanche_timeline.DASHBOARD, id="avalanche"),
     pytest.param(drought_timeline.DASHBOARD, id="drought"),
     pytest.param(earthquake_timeline.DASHBOARD, id="earthquake"),
+    pytest.param(fire_timeline.DASHBOARD, id="fire"),
+    pytest.param(flood_timeline.DASHBOARD, id="flood"),
+    pytest.param(iceberg_timeline.DASHBOARD, id="iceberg"),
+    pytest.param(storm_timeline.DASHBOARD, id="storm"),
+    pytest.param(volcano_timeline.DASHBOARD, id="volcano"),
 ]
 
 

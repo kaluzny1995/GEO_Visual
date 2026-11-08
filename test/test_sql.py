@@ -2,7 +2,16 @@
 
 import pytest
 
-from dashboard import avalanche_timeline, drought_timeline, earthquake_timeline
+from dashboard import (
+    avalanche_timeline,
+    drought_timeline,
+    earthquake_timeline,
+    fire_timeline,
+    flood_timeline,
+    iceberg_timeline,
+    storm_timeline,
+    volcano_timeline,
+)
 from dashboard.metrics_timeline import DashboardConfig
 from utils import sql
 
@@ -10,6 +19,11 @@ ALL_DASHBOARDS = (
     avalanche_timeline.DASHBOARD,
     drought_timeline.DASHBOARD,
     earthquake_timeline.DASHBOARD,
+    fire_timeline.DASHBOARD,
+    flood_timeline.DASHBOARD,
+    iceberg_timeline.DASHBOARD,
+    storm_timeline.DASHBOARD,
+    volcano_timeline.DASHBOARD,
 )
 
 DASHBOARD_CONFIGS = [pytest.param(config, id=config.key) for config in ALL_DASHBOARDS]
