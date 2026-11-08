@@ -37,7 +37,7 @@ addopts = "-q"
 
 [tool.mypy]
 files = [
-    "Start.py",
+    "app.py",
     "dashboard",
     "error.py",
     "model",

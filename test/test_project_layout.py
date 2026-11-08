@@ -28,7 +28,7 @@ def test_tox_defines_the_quality_environments(env: str) -> None:
     assert f"[testenv:{env}]" in text
 
 
-@pytest.mark.parametrize("expected", ["streamlit run Start.py", "SUPABASE_DB_USER", "metrics_avalanche_vw"])
+@pytest.mark.parametrize("expected", ["streamlit run app.py", "SUPABASE_DB_USER", "metrics_avalanche_vw"])
 def test_readme_documents_streamlit_and_supabase_setup(expected: str) -> None:
     """The README explains how to run the app, configure Supabase and find the dashboard."""
     text = (ROOT / "README.md").read_text(encoding="utf-8")

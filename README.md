@@ -30,8 +30,9 @@ trade-offs and the guardrails that keep large result sets out of the Streamlit p
 
 ## Features
 
-- **Streamlit multipage app** — a welcome page with a dashboard card and the first
-  dashboard, sharing branding and a compact left sidebar
+- **Streamlit multipage app** — the welcome page (`app.py`) and dashboard, with a
+  custom sidebar nav that labels the main tab **Start** and links to the
+  dashboard while the entrypoint script stays `app.py`
 - **Avalanche metrics timeline** — one Plotly line chart per metric from
   `geo.metrics_avalanche_vw`, with a snapshot date range and mean, median,
   maximum, total or observation-count statistics; every recorded value is
@@ -93,7 +94,7 @@ trade-offs and the guardrails that keep large result sets out of the Streamlit p
 
 ```text
 GEO_Visual/
-├── Start.py                                  # Streamlit entry point, welcome page and dashboard card
+├── app.py                                  # Streamlit entry point, welcome page and dashboard card
 ├── pages/
 │   └── 1_Avalanche_Timeline.py             # First dashboard page (multipage app)
 ├── dashboard/
@@ -118,7 +119,7 @@ GEO_Visual/
 │       └── supabase_postgres_provider.py   # Pooled engine, guarded queries and schema introspection
 ├── utils/
 │   ├── database.py                         # Cached provider, status and cached_query()
-│   ├── layout.py                           # Shared page config, branding and sidebar
+│   ├── layout.py                           # Shared page config, custom sidebar nav and branding
 │   └── sql.py                              # Loads sql/*.sql scripts
 ├── test/
 │   ├── dashboard/                          # Avalanche query, metric grouping and chart tests
@@ -158,7 +159,7 @@ conda activate geo_visual_311
 cp .env.example .env
 
 # 3. Run the Streamlit app
-streamlit run Start.py
+streamlit run app.py
 ```
 
 Streamlit opens at <http://localhost:8501>. The welcome page renders without a
@@ -275,7 +276,7 @@ thousands of files overflows the Linux inotify queue.
 ## Testing
 
 The suite is unit-focused: database calls are mocked, so no live Supabase connection
-or network access is required. `test/test_app.py` renders the real `Start.py` through
+or network access is required. `test/test_app.py` renders the real `app.py` through
 Streamlit's `AppTest` and checks the welcome page; `test/test_avalanche_page.py`
 renders the dashboard page with patched data and checks its charts, KPIs, empty
 states and friendly error card. `test/dashboard/` covers the avalanche query

@@ -76,6 +76,7 @@ def test_sidebar_keeps_branding_and_connection_status() -> None:
     """The shared sidebar is available on dashboard pages too."""
     at = run_page()
 
+    assert [link.label for link in at.sidebar.page_link] == ["Start", "Avalanche Timeline"]
     assert any(button.label == "Recheck connection" for button in at.sidebar.button)
     assert any("not configured" in warning.value.lower() for warning in at.sidebar.warning)
 

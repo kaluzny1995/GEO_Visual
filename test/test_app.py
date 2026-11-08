@@ -6,11 +6,11 @@ from streamlit.testing.v1 import AppTest
 
 from model.config.app_config import AppConfig
 
-APP_PATH = Path(__file__).resolve().parents[1] / "Start.py"
+APP_PATH = Path(__file__).resolve().parents[1] / "app.py"
 
 
 def run_app() -> AppTest:
-    """Render ``Start.py`` in Streamlit's test runtime."""
+    """Render ``app.py`` in Streamlit's test runtime."""
     return AppTest.from_file(str(APP_PATH), default_timeout=30).run()
 
 
@@ -37,11 +37,13 @@ def test_main_area_contains_welcome_and_avalanche_dashboard_card() -> None:
     assert not at.main.warning
 
 
-def test_sidebar_has_branding_and_connection_status() -> None:
-    """The left sidebar keeps branding and the Supabase connection status."""
+def test_sidebar_has_branding_navigation_and_connection_status() -> None:
+    """The left sidebar keeps branding, the Start tab and the dashboard link."""
     config = AppConfig.from_json()
     at = run_app()
 
     assert any(title.value == f"{config.app.page_icon} {config.app.title}" for title in at.sidebar.title)
+    assert [link.label for link in at.sidebar.page_link] == ["Start", "Avalanche Timeline"]
+    assert at.sidebar.page_link[0].page == "app"
     assert any(button.label == "Recheck connection" for button in at.sidebar.button)
     assert any("not configured" in warning.value.lower() for warning in at.sidebar.warning)

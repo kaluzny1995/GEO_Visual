@@ -126,7 +126,7 @@ GEO_ETL's base or `_etl` tables.
 | `sql/avalanche_metrics_date_bounds.sql` | Date picker bounds query |
 | `sql/avalanche_metrics_timeline.sql` | Parametrized timeline aggregate query |
 | `utils/sql.py` | Loads the checked-in `.sql` scripts |
-| `utils/layout.py` | Shared page configuration and sidebar (branding + Supabase status) |
+| `utils/layout.py` | Shared page configuration, custom Start/dashboard sidebar nav (branding + Supabase status) |
 | `test/dashboard/test_avalanche_timeline.py` | Parametrized aggregation, figure, gap and band tests |
 | `test/test_avalanche_page.py` | Page rendering, KPIs, parametrized empty states and error card via `AppTest` |
 | `test/test_sql.py` | SQL file contents, bind parameters and loader behavior |
