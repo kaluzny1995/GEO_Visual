@@ -2,6 +2,7 @@
 
 import streamlit as st
 
+from dashboard.catalog import DASHBOARDS
 from utils.layout import CONFIG, configure_page, render_sidebar
 
 configure_page()
@@ -13,18 +14,12 @@ st.markdown(CONFIG.app.subtitle)
 st.divider()
 st.subheader("Dashboards")
 
-with st.container(border=True):
-    st.markdown("#### ❄️ Avalanche metrics timeline")
-    st.markdown(
-        "Daily snapshots from `geo.metrics_avalanche_vw`: avalanche danger levels, "
-        "destructive size and any other numeric metric published by GEO_ETL. "
-        "Each metric gets its own linear timeline, with a selectable date range and "
-        "mean, maximum, total or observation-count statistic. Periods without "
-        "observations are shaded and labelled, and `danger_level = -1` (no rating) "
-        "is shown as recorded."
-    )
-    st.page_link(
-        "pages/1_Avalanche_Timeline.py",
-        label="Open Avalanche metrics timeline",
-        icon="❄️",
-    )
+for dashboard in DASHBOARDS:
+    with st.container(border=True):
+        st.markdown(f"#### {dashboard.icon} {dashboard.title}")
+        st.markdown(dashboard.description)
+        st.page_link(
+            dashboard.page_path,
+            label=f"Open {dashboard.title}",
+            icon=dashboard.icon,
+        )

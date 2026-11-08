@@ -2,31 +2,40 @@
 
 import pytest
 
-from dashboard import avalanche_timeline as timeline
+from dashboard import avalanche_timeline, drought_timeline
+from dashboard.metrics_timeline import DashboardConfig
 from utils import sql
 
+DASHBOARD_CONFIGS = [
+    pytest.param(avalanche_timeline.DASHBOARD, id="avalanche"),
+    pytest.param(drought_timeline.DASHBOARD, id="drought"),
+]
 
-@pytest.mark.parametrize(
-    "name, fragments",
-    [
-        pytest.param(
-            "avalanche_metrics_date_bounds",
-            ("to_char(min(file_date)", "to_char(max(file_date)", "geo.metrics_avalanche_vw"),
-            id="date-bounds",
+SQL_FILE_CASES = [
+    pytest.param(
+        f"{config.key}_metrics_date_bounds",
+        ("to_char(min(file_date)", "to_char(max(file_date)", config.view_name),
+        id=f"{config.key}-date-bounds",
+    )
+    for config in (avalanche_timeline.DASHBOARD, drought_timeline.DASHBOARD)
+]
+SQL_FILE_CASES += [
+    pytest.param(
+        f"{config.key}_metrics_timeline",
+        (
+            ":start_date",
+            ":end_date",
+            "GROUP BY file_date",
+            "percentile_cont(0.5)",
+            config.view_name,
         ),
-        pytest.param(
-            "avalanche_metrics_timeline",
-            (
-                ":start_date",
-                ":end_date",
-                "GROUP BY file_date",
-                "percentile_cont(0.5)",
-                "geo.metrics_avalanche_vw",
-            ),
-            id="timeline",
-        ),
-    ],
-)
+        id=f"{config.key}-timeline",
+    )
+    for config in (avalanche_timeline.DASHBOARD, drought_timeline.DASHBOARD)
+]
+
+
+@pytest.mark.parametrize("name, fragments", SQL_FILE_CASES)
 def test_sql_file_contains_required_fragments(name: str, fragments: tuple[str, ...]) -> None:
     """Each dashboard query lives in a reviewable SQL file with its parameters."""
     text = sql.load_sql(name)
@@ -34,16 +43,21 @@ def test_sql_file_contains_required_fragments(name: str, fragments: tuple[str, .
         assert fragment in text
 
 
+@pytest.mark.parametrize("config", DASHBOARD_CONFIGS)
 @pytest.mark.parametrize(
-    "constant, file_name",
+    "attribute, file_template",
     [
-        pytest.param(timeline.DATE_BOUNDS_QUERY, "avalanche_metrics_date_bounds", id="date-bounds"),
-        pytest.param(timeline.TIMELINE_QUERY, "avalanche_metrics_timeline", id="timeline"),
+        pytest.param("date_bounds_query", "{key}_metrics_date_bounds", id="date-bounds"),
+        pytest.param("timeline_query", "{key}_metrics_timeline", id="timeline"),
     ],
 )
-def test_dashboard_constants_are_loaded_from_sql_files(constant: str, file_name: str) -> None:
-    """The dashboard uses the checked-in SQL files, not inline query strings."""
-    assert constant == sql.load_sql(file_name)
+def test_dashboard_queries_are_loaded_from_sql_files(
+    config: DashboardConfig,
+    attribute: str,
+    file_template: str,
+) -> None:
+    """The dashboards use the checked-in SQL files, not inline query strings."""
+    assert getattr(config, attribute) == sql.load_sql(file_template.format(key=config.key))
 
 
 @pytest.mark.parametrize("name", ["does_not_exist", ""])

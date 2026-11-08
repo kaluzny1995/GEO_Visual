@@ -28,9 +28,12 @@ def test_tox_defines_the_quality_environments(env: str) -> None:
     assert f"[testenv:{env}]" in text
 
 
-@pytest.mark.parametrize("expected", ["streamlit run app.py", "SUPABASE_DB_USER", "metrics_avalanche_vw"])
-def test_readme_documents_streamlit_and_supabase_setup(expected: str) -> None:
-    """The README explains how to run the app, configure Supabase and find the dashboard."""
+@pytest.mark.parametrize(
+    "expected",
+    ["streamlit run app.py", "SUPABASE_DB_USER", "metrics_avalanche_vw", "metrics_drought_vw"],
+)
+def test_readme_documents_streamlit_supabase_and_dashboards(expected: str) -> None:
+    """The README explains how to run the app, configure Supabase and find the dashboards."""
     text = (ROOT / "README.md").read_text(encoding="utf-8")
     assert expected in text
 
@@ -48,14 +51,24 @@ def test_streamlit_theme_is_dark_and_committed() -> None:
     "relative_path",
     [
         "pages/1_Avalanche_Timeline.py",
+        "pages/2_Drought_Timeline.py",
         "dashboard/avalanche_timeline.py",
+        "dashboard/drought_timeline.py",
+        "dashboard/metrics_timeline.py",
+        "dashboard/catalog.py",
         "dashboard/__init__.py",
+        "docs/drought-timeline.md",
         "sql/avalanche_metrics_date_bounds.sql",
         "sql/avalanche_metrics_timeline.sql",
+        "sql/drought_metrics_date_bounds.sql",
+        "sql/drought_metrics_timeline.sql",
+        "test/test_metrics_pages.py",
+        "test/dashboard/test_dashboard_configs.py",
+        "test/dashboard/test_metrics_timeline.py",
         "utils/layout.py",
         "utils/sql.py",
     ],
 )
-def test_first_dashboard_files_are_committed(relative_path: str) -> None:
-    """The avalanche timeline page, SQL scripts and shared helpers are part of the runtime."""
+def test_dashboard_files_are_committed(relative_path: str) -> None:
+    """The dashboards, SQL scripts, docs and shared helpers are part of the runtime."""
     assert (ROOT / relative_path).is_file()

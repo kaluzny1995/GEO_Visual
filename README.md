@@ -12,12 +12,13 @@ GEO_Visual is the presentation layer of the GIS data pipeline, sitting alongside
 the analysis-ready tables that GEO_ETL loads into Supabase (PostgreSQL) and turns them
 into interactive Streamlit pages.
 
-The repository ships a welcome page and the first dashboard page. The welcome
+The repository ships a welcome page and two metrics dashboards. The welcome
 page describes the project, shows Supabase connection status and links to the
-**Avalanche metrics timeline** dashboard, which turns the daily snapshots in
-`geo.metrics_avalanche_vw` into separate line charts, one per metric. Supabase
+**Avalanche metrics timeline** and **Drought metrics timeline** dashboards,
+which turn the daily snapshots in `geo.metrics_avalanche_vw` and
+`geo.metrics_drought_vw` into separate line charts, one per metric. Supabase
 connection helpers, a shared sidebar and performance guardrails are used by
-both pages and are ready for the remaining data exploration, mapping and
+every page and are ready for the remaining data exploration, mapping and
 data-quality pages.
 
 GEO_Visual reads directly from Supabase Postgres rather than routing analytical
@@ -26,13 +27,13 @@ serialization. The app queries views in the `geo` schema only — base and `_etl
 tables remain owned by GEO_ETL. See [Performance](docs/performance.md) for the
 trade-offs and the guardrails that keep large result sets out of the Streamlit process.
 
-> Status: welcome page, Supabase connectivity and the avalanche metrics timeline are in place.
+> Status: welcome page, Supabase connectivity, avalanche and drought metrics timelines are in place.
 
 ## Features
 
-- **Streamlit multipage app** — the welcome page (`app.py`) and dashboard, with a
+- **Streamlit multipage app** — the welcome page (`app.py`) and dashboards, with a
   custom sidebar nav that labels the main tab **Start** and links to the
-  dashboard while the entrypoint script stays `app.py`
+  dashboards while the entrypoint script stays `app.py`
 - **Avalanche metrics timeline** — one Plotly line chart per metric from
   `geo.metrics_avalanche_vw`, with a snapshot date range and mean, median,
   maximum, total or observation-count statistics; every recorded value is
@@ -40,6 +41,11 @@ trade-offs and the guardrails that keep large result sets out of the Streamlit p
   visible, every chart spans the selected timeline and missing periods are
   shaded and labelled, and the mean view also shows the observed min-max band
   across forecast zones
+- **Drought metrics timeline** — the same timeline engine over
+  `geo.metrics_drought_vw`, covering drought `area` and any future numeric
+  drought metric with the same filters, missing-period shading and CSV export
+- **Shared timeline engine** — `dashboard/metrics_timeline.py` renders both
+  dashboards; per-view configurations and SQL scripts keep the page code small
 - **Supabase connectivity** — SQLAlchemy 2.0 sync engine with the psycopg 3 driver,
   credentials from `.env`, TLS enforced and prepared statements disabled for the
   Supabase transaction pooler
@@ -61,7 +67,7 @@ trade-offs and the guardrails that keep large result sets out of the Streamlit p
   port 8501, with Supabase credentials injected at runtime
 - **Dev tooling** — ruff (lint + format), mypy, pytest and tox
 - **Tests without a database** — mocked engine, chart builders and Streamlit's
-  `AppTest` cover the welcome page and the avalanche timeline
+  `AppTest` cover the welcome page and both timelines
 
 ## Dashboards
 
@@ -71,6 +77,10 @@ trade-offs and the guardrails that keep large result sets out of the Streamlit p
   [Avalanche metrics timeline](docs/avalanche-timeline.md) for the query,
   aggregation semantics and how the `danger_level = -1` (no rating) state is
   included in the full snapshot range.
+- **Drought metrics timeline** — daily changes of drought `area` and any other
+  numeric metric published in `geo.metrics_drought_vw`. See
+  [Drought metrics timeline](docs/drought-timeline.md) for the view, SQL
+  scripts and page behavior.
 
 ## Tech Stack
 
@@ -96,19 +106,26 @@ trade-offs and the guardrails that keep large result sets out of the Streamlit p
 GEO_Visual/
 ├── app.py                                  # Streamlit entry point, welcome page and dashboard card
 ├── pages/
-│   └── 1_Avalanche_Timeline.py             # First dashboard page (multipage app)
+│   ├── 1_Avalanche_Timeline.py             # Avalanche dashboard page
+│   └── 2_Drought_Timeline.py               # Drought dashboard page
 ├── dashboard/
 │   ├── __init__.py
-│   └── avalanche_timeline.py               # Avalanche aggregates and Plotly charts
+│   ├── metrics_timeline.py                 # Shared timeline engine and Plotly charts
+│   ├── avalanche_timeline.py               # Avalanche dashboard configuration
+│   ├── drought_timeline.py                 # Drought dashboard configuration
+│   └── catalog.py                          # Dashboard metadata for welcome cards and navigation
 ├── sql/
-│   ├── avalanche_metrics_date_bounds.sql   # Date picker bounds query
-│   └── avalanche_metrics_timeline.sql      # Parametrized timeline aggregate query
+│   ├── avalanche_metrics_date_bounds.sql   # Avalanche date picker bounds query
+│   ├── avalanche_metrics_timeline.sql      # Parametrized avalanche timeline query
+│   ├── drought_metrics_date_bounds.sql     # Drought date picker bounds query
+│   └── drought_metrics_timeline.sql        # Parametrized drought timeline query
 ├── config.json                             # App metadata and database pool/query limits
 ├── error.py                                # QueryTooLargeError
 ├── .streamlit/
 │   └── config.toml                         # Shared Streamlit theme
 ├── docs/
 │   ├── avalanche-timeline.md               # Avalanche dashboard query and aggregation rules
+│   ├── drought-timeline.md                 # Drought dashboard query and aggregation rules
 │   └── performance.md                      # Direct-Postgres rationale and views-only query rules
 ├── model/
 │   └── config/
@@ -122,11 +139,11 @@ GEO_Visual/
 │   ├── layout.py                           # Shared page config, custom sidebar nav and branding
 │   └── sql.py                              # Loads sql/*.sql scripts
 ├── test/
-│   ├── dashboard/                          # Avalanche query, metric grouping and chart tests
+│   ├── dashboard/                          # Shared engine and dashboard-config tests
 │   ├── model/config/                       # Config parsing and env loading
 │   ├── provider/supabase_postgres/         # Provider behavior with a mocked engine
 │   ├── test_app.py                         # Welcome page via Streamlit AppTest
-│   ├── test_avalanche_page.py              # Avalanche dashboard via Streamlit AppTest
+│   ├── test_metrics_pages.py               # Avalanche and drought pages via Streamlit AppTest
 │   ├── test_database.py                    # Connection status handling
 │   ├── test_project_layout.py              # Repository contract checks
 │   └── test_sql.py                         # SQL files, bind parameters and loader
@@ -163,10 +180,11 @@ streamlit run app.py
 ```
 
 Streamlit opens at <http://localhost:8501>. The welcome page renders without a
-database; the sidebar reports if Supabase is not configured. Open **Avalanche
-metrics timeline** from the dashboard card on the welcome page (or the sidebar)
-to see the first dashboard. It reads `geo.metrics_avalanche_vw`; without
-credentials or data it shows an empty state instead of failing.
+database; the sidebar reports if Supabase is not configured. Open the
+**Avalanche metrics timeline** or **Drought metrics timeline** from the welcome
+cards (or the sidebar). They read `geo.metrics_avalanche_vw` and
+`geo.metrics_drought_vw`; without credentials or data each page shows an empty
+state instead of failing.
 
 ### Docker (GEO_E2E stack)
 
@@ -277,11 +295,13 @@ thousands of files overflows the Linux inotify queue.
 
 The suite is unit-focused: database calls are mocked, so no live Supabase connection
 or network access is required. `test/test_app.py` renders the real `app.py` through
-Streamlit's `AppTest` and checks the welcome page; `test/test_avalanche_page.py`
-renders the dashboard page with patched data and checks its charts, KPIs, empty
-states and friendly error card. `test/dashboard/` covers the avalanche query
-parameters, metric grouping, aggregation columns and Plotly figures. Provider tests
-cover the row cap, statement timeout, scalar queries and engine options;
+Streamlit's `AppTest` and checks the welcome page and both dashboard cards;
+`test/test_metrics_pages.py` parametrizes the avalanche and drought pages and
+checks their charts, KPIs, empty states and friendly error cards.
+`test/dashboard/test_metrics_timeline.py` covers the shared engine, chart builders
+and aggregation cases; `test/dashboard/test_dashboard_configs.py` parametrizes the
+two dashboard configurations and their SQL loading. Provider tests cover the row
+cap, statement timeout, scalar queries and engine options;
 `test/test_database.py` covers the cached query wrapper.
 
 ```bash

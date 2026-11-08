@@ -4,6 +4,7 @@ from pathlib import Path
 
 import streamlit as st
 
+from dashboard.catalog import DASHBOARDS
 from model.config.app_config import AppConfig
 from utils.database import cached_connection_status, clear_connection_cache
 
@@ -36,11 +37,16 @@ def render_sidebar() -> None:
             label="Start",
             icon="🌍",
         )
-        st.page_link(
-            st.Page(str(PROJECT_DIR / "pages" / "1_Avalanche_Timeline.py"), title="Avalanche Timeline", icon="❄️"),
-            label="Avalanche Timeline",
-            icon="❄️",
-        )
+        for dashboard in DASHBOARDS:
+            st.page_link(
+                st.Page(
+                    str(PROJECT_DIR / dashboard.page_path),
+                    title=dashboard.nav_label,
+                    icon=dashboard.icon,
+                ),
+                label=dashboard.nav_label,
+                icon=dashboard.icon,
+            )
         st.divider()
 
         st.title(f"{CONFIG.app.page_icon} {CONFIG.app.title}")

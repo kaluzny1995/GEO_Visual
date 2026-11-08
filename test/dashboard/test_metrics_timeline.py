@@ -1,12 +1,9 @@
-"""Tests for the avalanche metrics timeline data layer and charts."""
-
-import datetime as dt
-from unittest.mock import patch
+"""Tests for the shared metrics timeline engine and Plotly figures."""
 
 import pandas as pd
 import pytest
 
-from dashboard import avalanche_timeline as timeline
+from dashboard import metrics_timeline as timeline
 
 
 def sample_frame() -> pd.DataFrame:
@@ -24,54 +21,6 @@ def sample_frame() -> pd.DataFrame:
             "sum_value": [6.0, 12.0],
         }
     )
-
-
-class TestLoadDateBounds:
-    """Tests for :func:`load_date_bounds`."""
-
-    def test_returns_first_and_last_snapshot_date(self) -> None:
-        """The bounds query narrows the date picker to the available snapshots."""
-        result = pd.DataFrame({"min_date": ["2026-09-01"], "max_date": ["2026-11-06"]})
-        with patch.object(timeline, "cached_query", return_value=result) as query:
-            bounds = timeline.load_date_bounds()
-
-        assert bounds == (dt.date(2026, 9, 1), dt.date(2026, 11, 6))
-        query.assert_called_once_with(timeline.DATE_BOUNDS_QUERY)
-
-    @pytest.mark.parametrize(
-        "frame",
-        [
-            pytest.param(pd.DataFrame(), id="empty-result"),
-            pytest.param(pd.DataFrame({"min_date": [None], "max_date": [None]}), id="null-result"),
-        ],
-    )
-    def test_returns_none_without_snapshots(self, frame: pd.DataFrame) -> None:
-        """An empty view leaves the page in its empty state."""
-        with patch.object(timeline, "cached_query", return_value=frame):
-            assert timeline.load_date_bounds() is None
-
-
-class TestLoadMetricTimeline:
-    """Tests for :func:`load_metric_timeline`."""
-
-    def test_forwards_the_date_range_and_normalises_types(self) -> None:
-        """The query is parameterised by the inclusive date range."""
-        with patch.object(timeline, "cached_query", return_value=sample_frame()) as query:
-            frame = timeline.load_metric_timeline(dt.date(2026, 11, 1), dt.date(2026, 11, 2))
-
-        query.assert_called_once_with(
-            timeline.TIMELINE_QUERY,
-            (("start_date", "2026-11-01"), ("end_date", "2026-11-02")),
-        )
-        assert pd.api.types.is_datetime64_any_dtype(frame["file_date"])
-        assert frame["observation_count"].dtype == "int64"
-        assert "measured_count" not in frame.columns
-
-    def test_returns_the_empty_frame_unchanged(self) -> None:
-        """The page can distinguish an empty range without extra normalisation."""
-        empty = pd.DataFrame()
-        with patch.object(timeline, "cached_query", return_value=empty):
-            assert timeline.load_metric_timeline(dt.date(2026, 11, 1), dt.date(2026, 11, 2)) is empty
 
 
 class TestMetricGroups:
@@ -97,6 +46,7 @@ class TestMetricGroups:
     [
         pytest.param("danger_level", "NAPADS level", "Danger Level (NAPADS level)", id="with-unit"),
         pytest.param("size", None, "Size", id="without-unit"),
+        pytest.param("area", "km²", "Area (km²)", id="drought-area"),
     ],
 )
 def test_metric_label(metric_name: str, metric_unit: str | None, expected: str) -> None:
@@ -240,13 +190,6 @@ class TestBuildMetricFigure:
         assert len(figure.layout.shapes) == 1
         assert any("No size observations" in annotation.text for annotation in figure.layout.annotations)
         assert any("2026-09-01 to 2026-09-03" in annotation.text for annotation in figure.layout.annotations)
-
-
-def test_timeline_query_keeps_every_recorded_value() -> None:
-    """The aggregate must not filter out the danger-level ``-1`` (no rating) state."""
-    assert "FILTER (WHERE metric_value" not in timeline.TIMELINE_QUERY
-    assert "avg(metric_value) AS mean_value" in timeline.TIMELINE_QUERY
-    assert "percentile_cont(0.5) WITHIN GROUP (ORDER BY metric_value) AS median_value" in timeline.TIMELINE_QUERY
 
 
 @pytest.mark.parametrize(
