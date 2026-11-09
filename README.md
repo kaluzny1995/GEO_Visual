@@ -12,11 +12,11 @@ GEO_Visual is the presentation layer of the GIS data pipeline, sitting alongside
 the analysis-ready tables that GEO_ETL loads into Supabase (PostgreSQL) and turns them
 into interactive Streamlit pages.
 
-The repository ships a welcome page and eight natural-phenomenon metrics
-dashboards: avalanche, drought, earthquake, fire, flood, iceberg, storm and
-volcano. The welcome page describes the project, shows Supabase connection
-status and links to each dashboard, which turns the daily snapshots in the
-corresponding `geo.metrics_*_vw` view into separate line charts, one per
+The repository ships a welcome page and eight natural-phenomenon dashboards:
+avalanche, drought, earthquake, fire, flood, iceberg, storm and volcano. The
+welcome page describes the project, shows Supabase connection status and links
+to each dashboard, which pairs a daily-snapshot **timeline** from the matching
+`geo.metrics_*_vw` view with a **value distribution histogram**, one pair per
 metric. Supabase connection helpers, a shared sidebar and performance
 guardrails are used by every page and are ready for the remaining data
 exploration, mapping and data-quality pages.
@@ -27,35 +27,42 @@ serialization. The app queries views in the `geo` schema only — base and `_etl
 tables remain owned by GEO_ETL. See [Performance](docs/performance.md) for the
 trade-offs and the guardrails that keep large result sets out of the Streamlit process.
 
-> Status: welcome page, Supabase connectivity and all eight natural-phenomenon metrics timelines are in place.
+> Status: welcome page, Supabase connectivity and all eight natural-phenomenon metric timelines and distributions are in place.
 
 ## Features
 
 - **Streamlit multipage app** — the welcome page (`app.py`) and dashboards, with a
   custom sidebar nav that labels the main tab **Start** and groups the
-  dashboards under a collapsible **Metric timelines** menu while the entrypoint
-  script stays `app.py`
-- **Avalanche metrics timeline** — one Plotly line chart per metric from
-  `geo.metrics_avalanche_vw`, with a snapshot date range and mean, median,
-  maximum, total or observation-count statistics; every recorded value is
-  plotted, so the `danger_level = -1` (no rating) off-season snapshots stay
-  visible, every chart spans the selected timeline and missing periods are
-  shaded, with missing ranges listed below each chart, and the mean view also shows the observed min-max band
-  across forecast zones
-- **Drought metrics timeline** — the same timeline engine over
-  `geo.metrics_drought_vw`, covering drought `area` and any future numeric
-  drought metric with the same filters, missing-period shading and CSV export
-- **Earthquake metrics timeline** — the same timeline engine over
+  dashboards under a collapsible **Metric timelines and distributions** menu
+  while the entrypoint script stays `app.py`
+- **Avalanche metrics timeline & distribution** — one Plotly line chart and one
+  value histogram per metric from `geo.metrics_avalanche_vw`, with a snapshot
+  date range and mean, median, maximum, total or observation-count statistics;
+  every recorded value is plotted, so the `danger_level = -1` (no rating)
+  off-season snapshots stay visible, every chart spans the selected timeline and
+  missing periods are shaded, with missing ranges listed below each chart, and
+  the mean view also shows the observed min-max band across forecast zones
+- **Drought metrics timeline & distribution** — the same timeline/histogram
+  engine over `geo.metrics_drought_vw`, covering drought `area` and any future
+  numeric drought metric with the same filters, missing-period shading and CSV
+  export
+- **Earthquake metrics timeline & distribution** — the same engine over
   `geo.metrics_earthquake_vw`, covering magnitude (`Mw`), depth, station counts
   and any future numeric earthquake metric; the one-observation `mlr` magnitude
   scale is hidden as too sparse to chart
-- **Fire, flood, iceberg, storm and volcano timelines** — the remaining
-  `geo.metrics_*_vw` views with the same filters, statistics, missing-period
-  shading and CSV export; fire, flood, storm and volcano charts expose all of
-  their published metric series, and iceberg surface/geometry series are shown
-  as well
+- **Fire, flood, iceberg, storm and volcano timelines & distributions** — the
+  remaining `geo.metrics_*_vw` views with the same filters, statistics,
+  histograms, missing-period shading and CSV export; fire shows `area` and
+  `percent_contained` (`geometry_count` hidden), flood shows `discharge`,
+  `threshold` and `exceedance_ratio` (`baseline_days` and `magnitude` hidden),
+  storm exposes all of its series, iceberg shows surface/geometry, and volcano
+  shows `vei` and `vnum` (casualties, damage and magnitude hidden)
+- **Value distribution histograms** — each timeline is paired with a 20-bin
+  histogram of every raw value for the visible metric series in the selected date range, computed from
+  the shared `sql/metrics_distribution.sql` query
 - **Shared timeline engine** — `dashboard/metrics_timeline.py` renders all eight
-  dashboards; per-view configurations and SQL scripts keep the page code small
+  timeline/distribution dashboards; per-view configurations and SQL scripts keep
+  the page code small
 - **Supabase connectivity** — SQLAlchemy 2.0 sync engine with the psycopg 3 driver,
   credentials from `.env`, TLS enforced and prepared statements disabled for the
   Supabase transaction pooler
@@ -77,29 +84,32 @@ trade-offs and the guardrails that keep large result sets out of the Streamlit p
   port 8501, with Supabase credentials injected at runtime
 - **Dev tooling** — ruff (lint + format), mypy, pytest and tox
 - **Tests without a database** — mocked engine, chart builders and Streamlit's
-  `AppTest` cover the welcome page and all timelines
+  `AppTest` cover the welcome page and all timeline/distribution dashboards
 
 ## Dashboards
 
-- **Avalanche metrics timeline** — daily changes of `danger_level`, avalanche
-  `size` and any other metric published in `geo.metrics_avalanche_vw`. Each
-  metric is rendered as its own linear timeline. See
-  [Avalanche metrics timeline](docs/avalanche-timeline.md) for the query,
-  aggregation semantics and how the `danger_level = -1` (no rating) state is
-  included in the full snapshot range.
-- **Drought metrics timeline** — daily changes of drought `area` and any other
-  numeric metric published in `geo.metrics_drought_vw`. See
-  [Drought metrics timeline](docs/drought-timeline.md) for the view, SQL
-  scripts and page behavior.
-- **Earthquake metrics timeline** — daily changes of `magnitude`, `depth`, `nst`
-  and any other numeric metric published in `geo.metrics_earthquake_vw`. See
-  [Earthquake metrics timeline](docs/earthquake-timeline.md) for the view, SQL
-  scripts and page behavior.
-- **Fire, flood, iceberg, storm and volcano timelines** — the remaining
-  natural-phenomenon views (`geo.metrics_fire_vw`, `geo.metrics_flood_vw`,
-  `geo.metrics_iceberg_vw`, `geo.metrics_storm_vw`, `geo.metrics_volcano_vw`)
-  with the same per-metric timelines and filters. See
-  [Fire, flood, iceberg, storm and volcano timelines](docs/phenomena-timelines.md)
+- **Avalanche metrics timeline & distribution** — daily changes of
+  `danger_level`, avalanche `size` and any other metric published in
+  `geo.metrics_avalanche_vw`, with a value histogram for each metric. See
+  [Avalanche metrics timeline & distribution](docs/avalanche-timeline.md) for
+  the query, aggregation semantics and how the `danger_level = -1` (no rating)
+  state is included in the full snapshot range.
+- **Drought metrics timeline & distribution** — daily changes of drought `area`
+  and any other numeric metric published in `geo.metrics_drought_vw`, with a
+  value histogram for each metric. See
+  [Drought metrics timeline & distribution](docs/drought-timeline.md) for the
+  view, SQL scripts and page behavior.
+- **Earthquake metrics timeline & distribution** — daily changes of `magnitude`,
+  `depth`, `nst` and any other numeric metric published in
+  `geo.metrics_earthquake_vw`, with a value histogram for each metric. See
+  [Earthquake metrics timeline & distribution](docs/earthquake-timeline.md) for
+  the view, SQL scripts and page behavior.
+- **Fire, flood, iceberg, storm and volcano timelines & distributions** — the
+  remaining natural-phenomenon views (`geo.metrics_fire_vw`,
+  `geo.metrics_flood_vw`, `geo.metrics_iceberg_vw`, `geo.metrics_storm_vw`,
+  `geo.metrics_volcano_vw`) with the same per-metric timelines, histograms and
+  filters. See
+  [Fire, flood, iceberg, storm and volcano timelines & distributions](docs/phenomena-timelines.md)
   for the current metric series and SQL files.
 
 ## Tech Stack
@@ -162,7 +172,8 @@ GEO_Visual/
 │   ├── storm_metrics_date_bounds.sql       # Storm date picker bounds query
 │   ├── storm_metrics_timeline.sql          # Parametrized storm timeline query
 │   ├── volcano_metrics_date_bounds.sql     # Volcano date picker bounds query
-│   └── volcano_metrics_timeline.sql        # Parametrized volcano timeline query
+│   ├── volcano_metrics_timeline.sql        # Parametrized volcano timeline query
+│   └── metrics_distribution.sql            # Shared raw values query for histograms
 ├── config.json                             # App metadata and database pool/query limits
 ├── error.py                                # QueryTooLargeError
 ├── .streamlit/
@@ -171,7 +182,7 @@ GEO_Visual/
 │   ├── avalanche-timeline.md               # Avalanche dashboard query and aggregation rules
 │   ├── drought-timeline.md                 # Drought dashboard query and aggregation rules
 │   ├── earthquake-timeline.md              # Earthquake dashboard query and aggregation rules
-│   ├── phenomena-timelines.md              # Fire, flood, iceberg, storm and volcano dashboards
+│   ├── phenomena-timelines.md              # Fire, flood, iceberg, storm and volcano timelines & distributions
 │   └── performance.md                      # Direct-Postgres rationale and views-only query rules
 ├── model/
 │   └── config/
@@ -189,7 +200,7 @@ GEO_Visual/
 │   ├── model/config/                       # Config parsing and env loading
 │   ├── provider/supabase_postgres/         # Provider behavior with a mocked engine
 │   ├── test_app.py                         # Welcome page via Streamlit AppTest
-│   ├── test_metrics_pages.py               # All eight metrics timeline pages via AppTest
+│   ├── test_metrics_pages.py               # All eight timeline and distribution pages via AppTest
 │   ├── test_database.py                    # Connection status handling
 │   ├── test_project_layout.py              # Repository contract checks
 │   └── test_sql.py                         # SQL files, bind parameters and loader
@@ -227,8 +238,8 @@ streamlit run app.py
 
 Streamlit opens at <http://localhost:8501>. The welcome page renders without a
 database; the sidebar reports if Supabase is not configured. Open the
-appropriate timeline from the welcome cards or the **Metric timelines** sidebar
-menu. Each dashboard reads its matching `geo.metrics_*_vw` view; without
+appropriate dashboard from the welcome cards or the **Metric timelines and
+distributions** sidebar menu. Each dashboard reads its matching `geo.metrics_*_vw` view; without
 credentials or data the page shows an empty state instead of failing.
 
 ### Docker (GEO_E2E stack)
@@ -342,11 +353,12 @@ The suite is unit-focused: database calls are mocked, so no live Supabase connec
 or network access is required. `test/test_app.py` renders the real `app.py` through
 Streamlit's `AppTest` and checks the welcome page and every dashboard card;
 `test/test_metrics_pages.py` parametrizes all eight natural-phenomenon
-pages and checks their charts, KPIs, empty states and friendly error cards.
-`test/dashboard/test_metrics_timeline.py` covers the shared engine, chart builders
-and aggregation cases; `test/dashboard/test_dashboard_configs.py` parametrizes the
-eight dashboard configurations and their SQL loading. Provider tests cover the row
-cap, statement timeout, scalar queries and engine options;
+pages and checks their timelines, histograms, KPIs, empty states and friendly
+error cards. `test/dashboard/test_metrics_timeline.py` covers the shared engine,
+timeline/histogram builders and aggregation cases;
+`test/dashboard/test_dashboard_configs.py` parametrizes the eight dashboard
+configurations and their timeline/distribution SQL loading. Provider tests cover
+the row cap, statement timeout, scalar queries and engine options;
 `test/test_database.py` covers the cached query wrapper.
 
 ```bash

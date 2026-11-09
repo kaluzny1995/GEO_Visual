@@ -58,6 +58,15 @@ def sample_frame(metrics: tuple[tuple[str, str | None], ...]) -> pd.DataFrame:
     return frame
 
 
+def sample_distribution(frame: pd.DataFrame) -> pd.DataFrame:
+    """Three raw values per metric series for the histogram."""
+    rows = []
+    for metric_name, metric_unit in frame[["metric_name", "metric_unit"]].drop_duplicates().itertuples(index=False):
+        for value in (1.0, 2.0, 3.0):
+            rows.append({"metric_name": metric_name, "metric_unit": metric_unit, "metric_value": value})
+    return pd.DataFrame(rows)
+
+
 FRAMES = {
     "avalanche": sample_frame((("danger_level", "NAPADS level"), ("size", "destructive size class"))),
     "drought": sample_frame((("area", "km²"),)),
@@ -71,16 +80,13 @@ FRAMES = {
     "fire": sample_frame(
         (
             ("area", "km²"),
-            ("geometry_count", None),
             ("percent_contained", "%"),
         )
     ),
     "flood": sample_frame(
         (
-            ("baseline_days", None),
             ("discharge", "m³/s"),
             ("exceedance_ratio", None),
-            ("magnitude", None),
             ("threshold", "m³/s"),
         )
     ),
@@ -104,14 +110,12 @@ FRAMES = {
     ),
     "volcano": sample_frame(
         (
-            ("casualties", "people"),
-            ("damage", "million USD"),
-            ("magnitude", None),
             ("vei", "VEI"),
             ("vnum", "Smithsonian GVP"),
         )
     ),
 }
+DISTRIBUTIONS = {key: sample_distribution(frame) for key, frame in FRAMES.items()}
 
 DASHBOARDS_UNDER_TEST = [
     pytest.param(avalanche_timeline.DASHBOARD, id="avalanche"),
@@ -128,11 +132,11 @@ DASHBOARD_CASES = [
     pytest.param(avalanche_timeline.DASHBOARD, 2, id="avalanche"),
     pytest.param(drought_timeline.DASHBOARD, 1, id="drought"),
     pytest.param(earthquake_timeline.DASHBOARD, 3, id="earthquake"),
-    pytest.param(fire_timeline.DASHBOARD, 3, id="fire"),
-    pytest.param(flood_timeline.DASHBOARD, 5, id="flood"),
+    pytest.param(fire_timeline.DASHBOARD, 2, id="fire"),
+    pytest.param(flood_timeline.DASHBOARD, 3, id="flood"),
     pytest.param(iceberg_timeline.DASHBOARD, 2, id="iceberg"),
     pytest.param(storm_timeline.DASHBOARD, 8, id="storm"),
-    pytest.param(volcano_timeline.DASHBOARD, 5, id="volcano"),
+    pytest.param(volcano_timeline.DASHBOARD, 2, id="volcano"),
 ]
 
 
@@ -140,38 +144,44 @@ def run_page(
     config: metrics_timeline.DashboardConfig,
     *,
     frame: pd.DataFrame | None = None,
+    distribution: pd.DataFrame | None = None,
     bounds: tuple[dt.date, dt.date] | None = DEFAULT_BOUNDS,
     bounds_error: Exception | None = None,
 ) -> AppTest:
     """Render a dashboard page with the database layer replaced by test data."""
     frame = FRAMES[config.key] if frame is None else frame
+    distribution = DISTRIBUTIONS[config.key] if distribution is None else distribution
     bounds_patch = (
         patch.object(metrics_timeline, "load_date_bounds", side_effect=bounds_error)
         if bounds_error is not None
         else patch.object(metrics_timeline, "load_date_bounds", return_value=bounds)
     )
-    with bounds_patch, patch.object(metrics_timeline, "load_metric_timeline", return_value=frame):
+    with (
+        bounds_patch,
+        patch.object(metrics_timeline, "load_metric_timeline", return_value=frame),
+        patch.object(metrics_timeline, "load_metric_distribution", return_value=distribution),
+    ):
         return AppTest.from_file(str(PAGE_PATHS[config.key]), default_timeout=30).run()
 
 
-@pytest.mark.parametrize("config, expected_charts", DASHBOARD_CASES)
+@pytest.mark.parametrize("config, expected_metrics", DASHBOARD_CASES)
 def test_page_renders_title_charts_and_filters(
     config: metrics_timeline.DashboardConfig,
-    expected_charts: int,
+    expected_metrics: int,
 ) -> None:
-    """Each dashboard turns its metrics into charts and summarises the range."""
+    """Each dashboard turns its metrics into a timeline and a histogram."""
     at = run_page(config)
 
     assert not at.exception
     assert at.main.title[0].value == f"{config.page_icon} {config.page_title}"
-    assert len(at.get("plotly_chart")) == expected_charts
+    assert len(at.get("plotly_chart")) == expected_metrics * 2
     metric_labels = [metric.label for metric in at.metric]
     assert "Snapshots" in metric_labels
     assert "Metrics" in metric_labels
     assert "Observations" in metric_labels
     assert "Latest snapshot" in metric_labels
     metrics_by_label = {metric.label: metric.value for metric in at.metric}
-    assert metrics_by_label["Metrics"] == str(expected_charts)
+    assert metrics_by_label["Metrics"] == str(expected_metrics)
     assert list(at.main.selectbox[0].options) == [
         "Mean",
         "Median",
@@ -180,7 +190,8 @@ def test_page_renders_title_charts_and_filters(
         "Observations",
     ]
     assert any("Mean of all recorded values" in caption.value for caption in at.caption)
-    assert any("each chart spans the selected dates" in caption.value for caption in at.caption)
+    assert any("timelines span the selected dates" in caption.value for caption in at.caption)
+    assert any("histograms show all values in the range" in caption.value for caption in at.caption)
     assert any("shaded areas mark missing observations" in caption.value for caption in at.caption)
     assert any(config.view_name in caption.value for caption in at.caption)
     if config.note:
@@ -209,7 +220,7 @@ def test_sidebar_keeps_navigation_and_connection_status(
 
     expected_labels = ["Start", *(dashboard.nav_label for dashboard in DASHBOARDS)]
     assert [link.label for link in at.sidebar.page_link] == expected_labels
-    assert [expander.label for expander in at.sidebar.expander] == ["Metric timelines"]
+    assert [expander.label for expander in at.sidebar.expander] == ["Metric timelines and distributions"]
     assert [link.label for link in at.sidebar.expander[0].page_link] == [
         dashboard.nav_label for dashboard in DASHBOARDS
     ]

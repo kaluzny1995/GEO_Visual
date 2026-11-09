@@ -100,6 +100,7 @@ def test_streamlit_theme_is_dark_and_committed() -> None:
         "sql/storm_metrics_timeline.sql",
         "sql/volcano_metrics_date_bounds.sql",
         "sql/volcano_metrics_timeline.sql",
+        "sql/metrics_distribution.sql",
         "test/test_metrics_pages.py",
         "test/dashboard/test_dashboard_configs.py",
         "test/dashboard/test_metrics_timeline.py",

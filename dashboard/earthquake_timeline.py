@@ -6,7 +6,7 @@ from utils.sql import load_sql
 DASHBOARD = DashboardConfig(
     key="earthquake",
     view_name="geo.metrics_earthquake_vw",
-    page_title="Earthquake metrics timeline",
+    page_title="Earthquake metrics timeline & distribution",
     page_icon="🏚️",
     description="earthquake metrics",
     date_bounds_query=load_sql("earthquake_metrics_date_bounds"),

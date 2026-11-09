@@ -6,7 +6,7 @@ from utils.sql import load_sql
 DASHBOARD = DashboardConfig(
     key="storm",
     view_name="geo.metrics_storm_vw",
-    page_title="Storm metrics timeline",
+    page_title="Storm metrics timeline & distribution",
     page_icon="⛈️",
     description="storm metrics",
     date_bounds_query=load_sql("storm_metrics_date_bounds"),

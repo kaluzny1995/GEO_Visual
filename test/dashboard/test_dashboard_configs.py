@@ -55,9 +55,29 @@ def frame_for_metrics(metrics: tuple[tuple[str, str], ...]) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True)
 
 
-def test_earthquake_config_declares_the_hidden_mlr_scale() -> None:
-    """The sparse mlr magnitude scale is explicitly hidden in configuration."""
-    assert earthquake_timeline.DASHBOARD.hidden_metrics == (("magnitude", "mlr"),)
+@pytest.mark.parametrize(
+    "config, expected",
+    [
+        pytest.param(avalanche_timeline.DASHBOARD, (), id="avalanche"),
+        pytest.param(drought_timeline.DASHBOARD, (), id="drought"),
+        pytest.param(earthquake_timeline.DASHBOARD, (("magnitude", "mlr"),), id="earthquake"),
+        pytest.param(fire_timeline.DASHBOARD, (("geometry_count", None),), id="fire"),
+        pytest.param(flood_timeline.DASHBOARD, (("baseline_days", None), ("magnitude", None)), id="flood"),
+        pytest.param(iceberg_timeline.DASHBOARD, (), id="iceberg"),
+        pytest.param(storm_timeline.DASHBOARD, (), id="storm"),
+        pytest.param(
+            volcano_timeline.DASHBOARD,
+            (("casualties", "people"), ("damage", "million USD"), ("magnitude", None)),
+            id="volcano",
+        ),
+    ],
+)
+def test_hidden_metric_configuration(
+    config: metrics_timeline.DashboardConfig,
+    expected: tuple[tuple[str, str | None], ...],
+) -> None:
+    """Sparse or flat metric series are explicitly hidden per dashboard."""
+    assert config.hidden_metrics == expected
 
 
 def test_earthquake_hides_the_sparse_mlr_magnitude_series() -> None:
@@ -162,3 +182,66 @@ class TestLoadMetricTimeline:
         with patch.object(metrics_timeline, "cached_query", return_value=empty):
             result = metrics_timeline.load_metric_timeline(config, dt.date(2026, 11, 1), dt.date(2026, 11, 2))
         assert result is empty
+
+
+@pytest.mark.parametrize("config", DASHBOARDS)
+class TestLoadMetricDistribution:
+    """Tests for :func:`metrics_timeline.load_metric_distribution`."""
+
+    def test_forwards_the_range_and_bins_raw_values(self, config: metrics_timeline.DashboardConfig) -> None:
+        """The distribution query is parametrized by the date range."""
+        raw = pd.DataFrame(
+            {
+                "metric_name": ["area", "area", "area"],
+                "metric_unit": ["km²", "km²", "km²"],
+                "metric_value": [1.0, 2.0, 3.0],
+            }
+        )
+        query = metrics_timeline.DISTRIBUTION_QUERY_TEMPLATE.format(view_name=config.view_name)
+        with patch.object(metrics_timeline, "cached_query", return_value=raw) as cached:
+            frame = metrics_timeline.load_metric_distribution(config, dt.date(2026, 11, 1), dt.date(2026, 11, 2))
+
+        cached.assert_called_once_with(
+            query,
+            (("start_date", "2026-11-01"), ("end_date", "2026-11-02")),
+            max_rows=metrics_timeline.DISTRIBUTION_MAX_ROWS,
+        )
+        assert frame["metric_value"].tolist() == [1.0, 2.0, 3.0]
+
+
+def test_load_metric_timeline_filters_hidden_series() -> None:
+    """The fire timeline omits the configured geometry-count series."""
+    frame = pd.concat(
+        [
+            sample_frame(),
+            sample_frame().assign(metric_name="geometry_count", metric_unit=None),
+        ],
+        ignore_index=True,
+    )
+    with patch.object(metrics_timeline, "cached_query", return_value=frame):
+        result = metrics_timeline.load_metric_timeline(
+            fire_timeline.DASHBOARD,
+            dt.date(2026, 11, 1),
+            dt.date(2026, 11, 2),
+        )
+
+    assert metrics_timeline.metric_groups(result) == [("area", "km²")]
+
+
+def test_filters_hidden_metric_series() -> None:
+    """The earthquake distribution omits the hidden mlr magnitude scale."""
+    raw = pd.DataFrame(
+        {
+            "metric_name": ["magnitude", "magnitude", "depth"],
+            "metric_unit": ["Mw", "mlr", "km"],
+            "metric_value": [4.5, 3.2, 10.0],
+        }
+    )
+    with patch.object(metrics_timeline, "cached_query", return_value=raw):
+        frame = metrics_timeline.load_metric_distribution(
+            earthquake_timeline.DASHBOARD,
+            dt.date(2026, 11, 1),
+            dt.date(2026, 11, 2),
+        )
+
+    assert set(frame["metric_unit"]) == {"Mw", "km"}

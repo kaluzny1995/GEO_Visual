@@ -12,7 +12,7 @@ from dashboard import (
     storm_timeline,
     volcano_timeline,
 )
-from dashboard.metrics_timeline import DashboardConfig
+from dashboard.metrics_timeline import DISTRIBUTION_QUERY_TEMPLATE, DashboardConfig
 from utils import sql
 
 ALL_DASHBOARDS = (
@@ -52,6 +52,15 @@ SQL_FILE_CASES += [
 ]
 
 
+SQL_FILE_CASES += [
+    pytest.param(
+        "metrics_distribution",
+        ("{view_name}", ":start_date", ":end_date", "metric_value", "SELECT"),
+        id="distribution",
+    )
+]
+
+
 @pytest.mark.parametrize("name, fragments", SQL_FILE_CASES)
 def test_sql_file_contains_required_fragments(name: str, fragments: tuple[str, ...]) -> None:
     """Each dashboard query lives in a reviewable SQL file with its parameters."""
@@ -75,6 +84,15 @@ def test_dashboard_queries_are_loaded_from_sql_files(
 ) -> None:
     """The dashboards use the checked-in SQL files, not inline query strings."""
     assert getattr(config, attribute) == sql.load_sql(file_template.format(key=config.key))
+
+
+@pytest.mark.parametrize("config", DASHBOARD_CONFIGS)
+def test_distribution_query_targets_the_dashboard_view(config: DashboardConfig) -> None:
+    """The shared distribution script is formatted with each dashboard's view."""
+    query = DISTRIBUTION_QUERY_TEMPLATE.format(view_name=config.view_name)
+    assert config.view_name in query
+    assert ":start_date" in query
+    assert ":end_date" in query
 
 
 @pytest.mark.parametrize("name", ["does_not_exist", ""])

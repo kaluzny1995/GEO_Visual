@@ -6,7 +6,7 @@ from utils.sql import load_sql
 DASHBOARD = DashboardConfig(
     key="avalanche",
     view_name="geo.metrics_avalanche_vw",
-    page_title="Avalanche metrics timeline",
+    page_title="Avalanche metrics timeline & distribution",
     page_icon="❄️",
     description="avalanche metrics",
     date_bounds_query=load_sql("avalanche_metrics_date_bounds"),

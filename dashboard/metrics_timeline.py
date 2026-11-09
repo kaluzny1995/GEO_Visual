@@ -19,14 +19,19 @@ import logging
 from dataclasses import dataclass
 from typing import Final
 
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
 import error
 from utils.database import cached_query
+from utils.sql import load_sql
 
 logger = logging.getLogger(__name__)
+
+DISTRIBUTION_QUERY_TEMPLATE = load_sql("metrics_distribution")
+DISTRIBUTION_MAX_ROWS: Final = 250_000
 
 
 @dataclass(frozen=True)
@@ -151,7 +156,7 @@ def _drop_hidden_metrics(config: DashboardConfig, frame: pd.DataFrame) -> pd.Dat
 
     Args:
         config: Dashboard configuration with the hidden pairs.
-        frame: Aggregated timeline frame.
+        frame: Timeline or raw distribution frame.
 
     Returns:
         The frame without the hidden metric series.
@@ -163,6 +168,35 @@ def _drop_hidden_metrics(config: DashboardConfig, frame: pd.DataFrame) -> pd.Dat
         unit = "" if metric_unit is None else metric_unit
         keep &= ~((frame["metric_name"] == metric_name) & (frame["metric_unit"].fillna("") == unit))
     return frame[keep].reset_index(drop=True)
+
+
+def load_metric_distribution(config: DashboardConfig, start_date: dt.date, end_date: dt.date) -> pd.DataFrame:
+    """Load raw metric values for the distribution histograms.
+
+    Args:
+        config: Dashboard configuration with the view name.
+        start_date: First snapshot date to include.
+        end_date: Last snapshot date to include (inclusive).
+
+    Returns:
+        A DataFrame with ``metric_name``, ``metric_unit`` and ``metric_value``
+        rows for all visible metric series in the selected range.
+    """
+    query = DISTRIBUTION_QUERY_TEMPLATE.format(view_name=config.view_name)
+    frame = cached_query(
+        query,
+        (
+            ("start_date", start_date.isoformat()),
+            ("end_date", end_date.isoformat()),
+        ),
+        max_rows=DISTRIBUTION_MAX_ROWS,
+    )
+    if frame.empty:
+        return frame
+    frame = frame.copy()
+    frame["metric_value"] = pd.to_numeric(frame["metric_value"], errors="coerce")
+    frame = frame.dropna(subset=["metric_value"]).reset_index(drop=True)
+    return _drop_hidden_metrics(config, frame)
 
 
 def metric_groups(frame: pd.DataFrame) -> list[tuple[str, str | None]]:
@@ -450,6 +484,91 @@ def build_metric_figure(
     return figure
 
 
+def build_distribution_figure(
+    values: pd.Series,
+    *,
+    metric_name: str,
+    metric_unit: str | None,
+    color: str,
+    bins: int = 20,
+) -> go.Figure:
+    """Build the value-distribution histogram for one metric.
+
+    Args:
+        values: Raw metric values in the selected date range.
+        metric_name: Raw view metric name.
+        metric_unit: Unit paired with the metric, if any.
+        color: Bar colour used by the metric.
+        bins: Number of equal-width histogram bins.
+
+    Returns:
+        A Plotly histogram with centred title and dark-theme styling.
+    """
+    clean = pd.to_numeric(values, errors="coerce").dropna().to_numpy(dtype=float)
+    unit_suffix = f" {metric_unit}" if metric_unit else ""
+    figure = go.Figure()
+    if clean.size:
+        counts, boundaries = np.histogram(clean, bins=bins)
+        centers = (boundaries[:-1] + boundaries[1:]) / 2
+        widths = np.diff(boundaries)
+        figure.add_trace(
+            go.Bar(
+                x=centers,
+                y=counts,
+                width=widths * 0.92,
+                marker={"color": _rgba(color, 0.65), "line": {"color": color, "width": 0.5}},
+                hovertemplate=(f"Value: %{{x:.4g}}{unit_suffix}<br>Count: %{{y:,}}<extra></extra>"),
+                showlegend=False,
+            )
+        )
+    else:
+        figure.add_annotation(
+            text="No values in this range",
+            xref="paper",
+            yref="paper",
+            x=0.5,
+            y=0.5,
+            showarrow=False,
+            font={"color": "#64748b"},
+        )
+
+    figure.update_layout(
+        title={
+            "text": "Distribution",
+            "x": 0.5,
+            "xanchor": "center",
+            "y": 0.98,
+            "yanchor": "top",
+        },
+        height=380,
+        margin={"l": 56, "r": 16, "t": 80, "b": 48},
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font={"family": "sans serif", "size": 13, "color": "#e2e8f0"},
+        hoverlabel={"bgcolor": "#1e293b", "bordercolor": "#334155", "font": {"color": "#e2e8f0"}},
+        showlegend=False,
+        bargap=0.05,
+        modebar={"bgcolor": "rgba(0,0,0,0)", "color": "#94a3b8", "activecolor": "#2dd4bf"},
+    )
+    figure.update_xaxes(
+        title_text=f"Value{f' ({metric_unit})' if metric_unit else ''}",
+        nticks=6,
+        showgrid=False,
+        linecolor="rgba(226, 232, 240, 0.25)",
+        tickfont={"color": "#cbd5e1"},
+        title_font={"color": "#e2e8f0"},
+    )
+    figure.update_yaxes(
+        title_text="Count",
+        gridcolor="rgba(226, 232, 240, 0.14)",
+        zeroline=False,
+        linecolor="rgba(226, 232, 240, 0.25)",
+        tickfont={"color": "#cbd5e1"},
+        title_font={"color": "#e2e8f0"},
+    )
+    return figure
+
+
 def render_dashboard(config: DashboardConfig) -> None:
     """Render one configured metrics timeline page.
 
@@ -514,15 +633,26 @@ def render_dashboard(config: DashboardConfig) -> None:
         st.info(f"No {config.description} were recorded in the selected date range.")
         return
 
+    try:
+        distribution = load_metric_distribution(config, start_date, end_date)
+    except error.QueryTooLargeError:
+        distribution = pd.DataFrame()
+        st.warning("Distribution data is too large for the selected range; showing timelines only.")
+    except Exception as exc:  # UI boundary: any failure becomes a page message.
+        logger.warning("Could not load the %s distribution: %s", config.description, exc)
+        distribution = pd.DataFrame()
+        st.warning("Distribution data could not be loaded; showing timelines only.")
+
     aggregation = AGGREGATIONS[aggregation_key]
     _render_summary(frame)
     st.caption(
-        f"{aggregation.description} · each chart spans the selected dates · "
-        f"shaded areas mark missing observations · source `{config.view_name}`"
+        f"{aggregation.description} · timelines span the selected dates · "
+        "shaded areas mark missing observations · histograms show all values in the range · "
+        f"source `{config.view_name}`"
     )
     if config.note and config.note_metric in set(frame["metric_name"]):
         st.caption(config.note)
-    _render_charts(frame, aggregation, start_date, end_date)
+    _render_charts(frame, distribution, aggregation, start_date, end_date)
     _render_data(config, frame)
 
 
@@ -538,28 +668,53 @@ def _render_summary(frame: pd.DataFrame) -> None:
 
 def _render_charts(
     frame: pd.DataFrame,
+    distribution: pd.DataFrame,
     aggregation: Aggregation,
     start_date: dt.date,
     end_date: dt.date,
 ) -> None:
-    """Render one full-width line chart per distinct metric on the shared timeline."""
+    """Render a timeline and value histogram for each distinct metric."""
     date_index = pd.date_range(start_date, end_date, freq="D")
     for index, (metric_name, metric_unit) in enumerate(metric_groups(frame)):
         metric_frame = frame[
             (frame["metric_name"] == metric_name) & (frame["metric_unit"].fillna("") == (metric_unit or ""))
         ]
-        figure = build_metric_figure(
+        color = PALETTE[index % len(PALETTE)]
+        timeline_figure = build_metric_figure(
             metric_frame,
             metric_name=metric_name,
             metric_unit=metric_unit,
             aggregation=aggregation,
-            color=PALETTE[index % len(PALETTE)],
+            color=color,
             date_index=date_index,
         )
-        st.plotly_chart(figure, width="stretch", key=f"metric-{index}")
-        missing_caption = format_missing_runs(missing_observation_runs(metric_frame, date_index))
-        if missing_caption:
-            st.caption(missing_caption)
+        distribution_frame = distribution[
+            (distribution["metric_name"] == metric_name)
+            & (distribution["metric_unit"].fillna("") == (metric_unit or ""))
+        ]
+        distribution_values = (
+            distribution_frame["metric_value"] if not distribution_frame.empty else pd.Series(dtype="float64")
+        )
+        distribution_figure = build_distribution_figure(
+            distribution_values,
+            metric_name=metric_name,
+            metric_unit=metric_unit,
+            color=color,
+        )
+
+        timeline_column, distribution_column = st.columns([2, 1])
+        with timeline_column:
+            st.plotly_chart(timeline_figure, width="stretch", key=f"metric-timeline-{index}")
+            missing_caption = format_missing_runs(missing_observation_runs(metric_frame, date_index))
+            if missing_caption:
+                st.caption(missing_caption)
+        with distribution_column:
+            st.plotly_chart(
+                distribution_figure,
+                width="stretch",
+                config={"displayModeBar": False},
+                key=f"metric-distribution-{index}",
+            )
 
 
 def _render_data(config: DashboardConfig, frame: pd.DataFrame) -> None:

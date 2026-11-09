@@ -1,13 +1,13 @@
-# Avalanche metrics timeline
+# Avalanche metrics timeline & distribution
 
 The first GEO_Visual dashboard follows daily avalanche metrics from the
-`geo.metrics_avalanche_vw` view. Every distinct metric gets its own linear
-timeline, so a change in `danger_level` is never mixed into the line for
+`geo.metrics_avalanche_vw` view. Every distinct metric gets its own linear timeline
+and value distribution histogram, so a change in `danger_level` is never mixed into the line for
 avalanche `size` or any future metric. It uses the shared
 `dashboard/metrics_timeline.py` engine; the drought and earthquake dashboards
 use the same engine with their own configurations and SQL files.
 
-Open it at **<http://localhost:8501> → Avalanche metrics timeline**, from the
+Open it at **<http://localhost:8501> → Avalanche**, from the
 dashboard card on the welcome page, or via `pages/1_Avalanche_Timeline.py` in
 the source tree.
 
@@ -59,16 +59,26 @@ connected with a straight line. When a metric has no observations for one or
 more snapshots, the real timeline is still shown: the empty period is shaded
 and labelled with its date range (for example, `size` before 2026-10-31).
 
+## Distribution
+
+Each timeline has a value distribution histogram on its right. The histogram
+uses every raw `metric_value` row for the visible metric series in the selected date range, grouped by
+`(metric_name, metric_unit)`, with 20 equal-width bins. It is independent of
+the selected Statistic. All dashboards share the parameterized
+`sql/metrics_distribution.sql` query; the dashboard configuration supplies the
+view name.
+
 ## Query
 
-The dashboard runs two guarded queries through
-`utils.database.cached_query()`. Both live in the `sql/` folder and are loaded
-by `utils.sql.load_sql()`:
+The dashboard runs three guarded queries through
+`utils.database.cached_query()`. All three live in the `sql/` folder and are
+loaded by `utils.sql.load_sql()`:
 
 | File | Purpose |
 |------|---------|
 | `sql/avalanche_metrics_date_bounds.sql` | Date picker bounds; no bind parameters |
 | `sql/avalanche_metrics_timeline.sql` | Timeline aggregates; binds `:start_date` and `:end_date` |
+| `sql/metrics_distribution.sql` | Raw values for the histograms; binds `:start_date` and `:end_date` |
 
 ```sql
 -- sql/avalanche_metrics_date_bounds.sql
@@ -94,7 +104,7 @@ GROUP BY file_date, metric_name, metric_unit
 ORDER BY file_date, metric_name, metric_unit;
 ```
 
-Both queries are bounded chart-sized results and are cached by
+All three queries are bounded chart-sized results and are cached by
 `cached_query()` for `database.cache_ttl_seconds` (300 seconds by default).
 The page follows the [views-only contract](performance.md): it never reads
 GEO_ETL's base or `_etl` tables.
@@ -103,8 +113,9 @@ GEO_ETL's base or `_etl` tables.
 
 - **Snapshot range** — defaults to the full range in the view; the start and
   end dates are inclusive.
-- **One chart per metric** — metrics are discovered from the returned rows, so
-  a new numeric metric in the view appears without a code change. `danger_level`
+- **One timeline and histogram per metric** — metrics are discovered from the
+  returned rows, so a new numeric metric in the view appears without a code
+  change, with its own timeline and value distribution histogram. `danger_level`
   and `size` are the current avalanche metrics.
 - **All recorded values** — `danger_level = -1` (no rating) is plotted as a
   real state, so the full September–November snapshot range is visible. Every
@@ -125,14 +136,15 @@ GEO_ETL's base or `_etl` tables.
 |------|------|
 | `pages/1_Avalanche_Timeline.py` | Streamlit page entry — page config, shared sidebar, render call |
 | `dashboard/avalanche_timeline.py` | Avalanche `DashboardConfig` (view, title, SQL, no-rating note) |
-| `dashboard/metrics_timeline.py` | Shared timeline engine, aggregation metadata, metric grouping and Plotly figures |
+| `dashboard/metrics_timeline.py` | Shared timeline and distribution engine, aggregation metadata and Plotly figures |
 | `dashboard/catalog.py` | Dashboard metadata for the welcome cards and sidebar navigation |
 | `sql/avalanche_metrics_date_bounds.sql` | Date picker bounds query |
 | `sql/avalanche_metrics_timeline.sql` | Parametrized timeline aggregate query |
+| `sql/metrics_distribution.sql` | Shared raw-values query for the histograms |
 | `utils/sql.py` | Loads the checked-in `.sql` scripts |
-| `utils/layout.py` | Shared page configuration, custom Start + collapsible Metric timelines sidebar nav (branding + Supabase status) |
+| `utils/layout.py` | Shared page configuration, custom Start + collapsible Metric timelines and distributions sidebar nav (branding + Supabase status) |
 | `test/dashboard/test_metrics_timeline.py` | Parametrized aggregation, figure, gap and band tests |
-| `test/dashboard/test_dashboard_configs.py` | Parametrized avalanche/drought/earthquake configuration and query tests |
+| `test/dashboard/test_dashboard_configs.py` | Parametrized all eight dashboard configuration, timeline and distribution query tests |
 | `test/test_metrics_pages.py` | Parametrized page rendering, KPIs, empty states and error cards via `AppTest` |
 | `test/test_sql.py` | SQL file contents, bind parameters and loader behavior |
 

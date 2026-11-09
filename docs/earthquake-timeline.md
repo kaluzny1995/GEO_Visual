@@ -1,12 +1,12 @@
-# Earthquake metrics timeline
+# Earthquake metrics timeline & distribution
 
 The earthquake dashboard follows daily earthquake metrics from the
-`geo.metrics_earthquake_vw` view. Every distinct metric gets its own linear
-timeline, using the same shared engine as the
+`geo.metrics_earthquake_vw` view. Every distinct metric gets its own linear timeline
+and value distribution histogram, using the same shared engine as the
 [Avalanche metrics timeline](avalanche-timeline.md) and
 [Drought metrics timeline](drought-timeline.md).
 
-Open it at **<http://localhost:8501> → Earthquake Timeline**, from the dashboard
+Open it at **<http://localhost:8501> → Earthquake**, from the dashboard
 card on the welcome page, or via `pages/3_Earthquake_Timeline.py` in the source
 tree.
 
@@ -60,16 +60,26 @@ observations are shaded, with their ranges listed below the chart; the grey fiel
 series such as `magnitude` in `mlr` is hidden entirely rather than rendered as
 one point and months of no-data shading.
 
+## Distribution
+
+Each timeline has a value distribution histogram on its right. The histogram
+uses every raw `metric_value` row for the visible metric series in the selected date range, grouped by
+`(metric_name, metric_unit)`, with 20 equal-width bins. It is independent of
+the selected Statistic. All dashboards share the parameterized
+`sql/metrics_distribution.sql` query; the dashboard configuration supplies the
+view name.
+
 ## Query
 
-The dashboard runs two guarded queries through
-`utils.database.cached_query()`. Both live in the `sql/` folder and are loaded
-by `utils.sql.load_sql()`:
+The dashboard runs three guarded queries through
+`utils.database.cached_query()`. All three live in the `sql/` folder and are
+loaded by `utils.sql.load_sql()`:
 
 | File | Purpose |
 |------|---------|
 | `sql/earthquake_metrics_date_bounds.sql` | Date picker bounds; no bind parameters |
 | `sql/earthquake_metrics_timeline.sql` | Timeline aggregates; binds `:start_date` and `:end_date` |
+| `sql/metrics_distribution.sql` | Raw values for the histograms; binds `:start_date` and `:end_date` |
 
 ```sql
 -- sql/earthquake_metrics_date_bounds.sql
@@ -95,7 +105,7 @@ GROUP BY file_date, metric_name, metric_unit
 ORDER BY file_date, metric_name, metric_unit;
 ```
 
-Both queries are bounded chart-sized results and are cached by
+All three queries are bounded chart-sized results and are cached by
 `cached_query()` for `database.cache_ttl_seconds` (300 seconds by default).
 The page follows the [views-only contract](performance.md): it never reads
 GEO_ETL's base or `_etl` tables.
@@ -122,21 +132,22 @@ GEO_ETL's base or `_etl` tables.
 |------|------|
 | `pages/3_Earthquake_Timeline.py` | Streamlit page entry — page config, shared sidebar, render call |
 | `dashboard/earthquake_timeline.py` | Earthquake `DashboardConfig` (view, title, SQL) |
-| `dashboard/metrics_timeline.py` | Shared timeline engine, aggregation metadata, metric grouping and Plotly figures |
+| `dashboard/metrics_timeline.py` | Shared timeline and distribution engine, aggregation metadata and Plotly figures |
 | `dashboard/catalog.py` | Dashboard metadata for the welcome cards and sidebar navigation |
 | `sql/earthquake_metrics_date_bounds.sql` | Date picker bounds query |
 | `sql/earthquake_metrics_timeline.sql` | Parametrized timeline aggregate query |
+| `sql/metrics_distribution.sql` | Shared raw-values query for the histograms |
 | `utils/sql.py` | Loads the checked-in `.sql` scripts |
-| `utils/layout.py` | Shared page configuration, custom Start + collapsible Metric timelines sidebar nav (branding + Supabase status) |
+| `utils/layout.py` | Shared page configuration, custom Start + collapsible Metric timelines and distributions sidebar nav (branding + Supabase status) |
 | `test/dashboard/test_metrics_timeline.py` | Shared engine, aggregation, figure, gap and band tests |
-| `test/dashboard/test_dashboard_configs.py` | Parametrized avalanche/drought/earthquake configuration and query tests |
+| `test/dashboard/test_dashboard_configs.py` | Parametrized all eight dashboard configuration, timeline and distribution query tests |
 | `test/test_metrics_pages.py` | Parametrized page rendering, KPIs, empty states and error cards via `AppTest` |
 | `test/test_sql.py` | SQL file contents, bind parameters and loader behavior |
 
 ## Testing
 
 The earthquake page is covered by the same parametrized suites as the avalanche
-and drought pages: configuration and SQL loading, chart builders, page rendering
+and drought pages: configuration and SQL loading, timeline and histogram builders, page rendering
 with patched data, empty states and error cards. No live Supabase connection is
 required.
 

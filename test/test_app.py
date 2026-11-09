@@ -54,7 +54,7 @@ def test_sidebar_has_branding_navigation_and_connection_status() -> None:
         "Start",
         *(dashboard.nav_label for dashboard in DASHBOARDS),
     ]
-    assert [expander.label for expander in at.sidebar.expander] == ["Metric timelines"]
+    assert [expander.label for expander in at.sidebar.expander] == ["Metric timelines and distributions"]
     assert [link.label for link in at.sidebar.expander[0].page_link] == [
         dashboard.nav_label for dashboard in DASHBOARDS
     ]

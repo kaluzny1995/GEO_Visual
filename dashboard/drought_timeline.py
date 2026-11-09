@@ -6,7 +6,7 @@ from utils.sql import load_sql
 DASHBOARD = DashboardConfig(
     key="drought",
     view_name="geo.metrics_drought_vw",
-    page_title="Drought metrics timeline",
+    page_title="Drought metrics timeline & distribution",
     page_icon="🌵",
     description="drought metrics",
     date_bounds_query=load_sql("drought_metrics_date_bounds"),

@@ -37,7 +37,7 @@ def render_sidebar() -> None:
             label="Start",
             icon="🌍",
         )
-        with st.expander("Metric timelines", expanded=True):
+        with st.expander("Metric timelines and distributions", expanded=True):
             for dashboard in DASHBOARDS:
                 st.page_link(
                     st.Page(

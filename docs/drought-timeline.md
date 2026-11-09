@@ -1,12 +1,12 @@
-# Drought metrics timeline
+# Drought metrics timeline & distribution
 
 The drought dashboard follows daily drought metrics from the
-`geo.metrics_drought_vw` view. Every distinct metric gets its own linear
-timeline, using the same shared engine as the
+`geo.metrics_drought_vw` view. Every distinct metric gets its own linear timeline
+and value distribution histogram, using the same shared engine as the
 [Avalanche metrics timeline](avalanche-timeline.md) and
 [Earthquake metrics timeline](earthquake-timeline.md).
 
-Open it at **<http://localhost:8501> → Drought Timeline**, from the dashboard
+Open it at **<http://localhost:8501> → Drought**, from the dashboard
 card on the welcome page, or via `pages/2_Drought_Timeline.py` in the source
 tree.
 
@@ -51,16 +51,26 @@ observations are shaded instead of being cut out or connected with a straight li
 with their ranges listed in a compact caption below the chart. Drought snapshots are not published every
 day, so gap shading is expected.
 
+## Distribution
+
+Each timeline has a value distribution histogram on its right. The histogram
+uses every raw `metric_value` row for the visible metric series in the selected date range, grouped by
+`(metric_name, metric_unit)`, with 20 equal-width bins. It is independent of
+the selected Statistic. All dashboards share the parameterized
+`sql/metrics_distribution.sql` query; the dashboard configuration supplies the
+view name.
+
 ## Query
 
-The dashboard runs two guarded queries through
-`utils.database.cached_query()`. Both live in the `sql/` folder and are loaded
-by `utils.sql.load_sql()`:
+The dashboard runs three guarded queries through
+`utils.database.cached_query()`. All three live in the `sql/` folder and are
+loaded by `utils.sql.load_sql()`:
 
 | File | Purpose |
 |------|---------|
 | `sql/drought_metrics_date_bounds.sql` | Date picker bounds; no bind parameters |
 | `sql/drought_metrics_timeline.sql` | Timeline aggregates; binds `:start_date` and `:end_date` |
+| `sql/metrics_distribution.sql` | Raw values for the histograms; binds `:start_date` and `:end_date` |
 
 ```sql
 -- sql/drought_metrics_date_bounds.sql
@@ -86,7 +96,7 @@ GROUP BY file_date, metric_name, metric_unit
 ORDER BY file_date, metric_name, metric_unit;
 ```
 
-Both queries are bounded chart-sized results and are cached by
+All three queries are bounded chart-sized results and are cached by
 `cached_query()` for `database.cache_ttl_seconds` (300 seconds by default).
 The page follows the [views-only contract](performance.md): it never reads
 GEO_ETL's base or `_etl` tables.
@@ -95,8 +105,9 @@ GEO_ETL's base or `_etl` tables.
 
 - **Snapshot range** — defaults to the full range in the view; the start and
   end dates are inclusive.
-- **One chart per metric** — metrics are discovered from the returned rows, so
-  a new numeric metric in the view appears without a code change.
+- **One timeline and histogram per metric** — metrics are discovered from the
+  returned rows, so a new numeric metric in the view appears without a code
+  change, with its own timeline and value distribution histogram.
 - **All recorded values** — every chart spans the selected date range; periods
   where a metric has no observations are shaded, with their ranges listed below the chart; the grey field reaches the nearest observed snapshot on each side.
 - **KPIs** — snapshots, metrics, observations and the latest snapshot in the
@@ -112,21 +123,22 @@ GEO_ETL's base or `_etl` tables.
 |------|------|
 | `pages/2_Drought_Timeline.py` | Streamlit page entry — page config, shared sidebar, render call |
 | `dashboard/drought_timeline.py` | Drought `DashboardConfig` (view, title, SQL) |
-| `dashboard/metrics_timeline.py` | Shared timeline engine, aggregation metadata, metric grouping and Plotly figures |
+| `dashboard/metrics_timeline.py` | Shared timeline and distribution engine, aggregation metadata and Plotly figures |
 | `dashboard/catalog.py` | Dashboard metadata for the welcome cards and sidebar navigation |
 | `sql/drought_metrics_date_bounds.sql` | Date picker bounds query |
 | `sql/drought_metrics_timeline.sql` | Parametrized timeline aggregate query |
+| `sql/metrics_distribution.sql` | Shared raw-values query for the histograms |
 | `utils/sql.py` | Loads the checked-in `.sql` scripts |
-| `utils/layout.py` | Shared page configuration, custom Start + collapsible Metric timelines sidebar nav (branding + Supabase status) |
+| `utils/layout.py` | Shared page configuration, custom Start + collapsible Metric timelines and distributions sidebar nav (branding + Supabase status) |
 | `test/dashboard/test_metrics_timeline.py` | Shared engine, aggregation, figure, gap and band tests |
-| `test/dashboard/test_dashboard_configs.py` | Parametrized avalanche/drought/earthquake configuration and query tests |
+| `test/dashboard/test_dashboard_configs.py` | Parametrized all eight dashboard configuration, timeline and distribution query tests |
 | `test/test_metrics_pages.py` | Parametrized page rendering, KPIs, empty states and error cards via `AppTest` |
 | `test/test_sql.py` | SQL file contents, bind parameters and loader behavior |
 
 ## Testing
 
 The drought page is covered by the same parametrized suites as the avalanche
-page: configuration and SQL loading, chart builders, page rendering with
+page: configuration and SQL loading, timeline and histogram builders, page rendering with
 patched data, empty states and error cards. No live Supabase connection is
 required.
 

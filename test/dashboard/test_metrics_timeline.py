@@ -285,6 +285,37 @@ class TestBuildMetricFigure:
         )
 
 
+def test_distribution_figure_has_value_bars() -> None:
+    """The histogram bins raw values and uses the metric colour."""
+    figure = timeline.build_distribution_figure(
+        pd.Series([1.0, 2.0, 2.0, 3.0]),
+        metric_name="area",
+        metric_unit="km²",
+        color="#2dd4bf",
+    )
+
+    assert len(figure.data) == 1
+    assert sum(figure.data[0].y) == 4
+    assert figure.data[0].marker.color == "rgba(45, 212, 191, 0.65)"
+    assert figure.layout.title.text == "Distribution"
+    assert figure.layout.xaxis.title.text == "Value (km²)"
+    assert figure.layout.title.x == 0.5
+    assert figure.layout.yaxis.title.text == "Count"
+
+
+def test_distribution_figure_handles_an_empty_range() -> None:
+    """An empty range gets an explanatory placeholder instead of a bar trace."""
+    figure = timeline.build_distribution_figure(
+        pd.Series(dtype="float64"),
+        metric_name="area",
+        metric_unit="km²",
+        color="#2dd4bf",
+    )
+
+    assert not figure.data
+    assert any("No values in this range" in annotation.text for annotation in figure.layout.annotations)
+
+
 def test_format_missing_runs_lists_multiple_ranges() -> None:
     """The caption squeezes several no-data ranges into one readable line."""
     runs = [

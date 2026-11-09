@@ -6,7 +6,7 @@ from utils.sql import load_sql
 DASHBOARD = DashboardConfig(
     key="iceberg",
     view_name="geo.metrics_iceberg_vw",
-    page_title="Iceberg metrics timeline",
+    page_title="Iceberg metrics timeline & distribution",
     page_icon="🧊",
     description="iceberg metrics",
     date_bounds_query=load_sql("iceberg_metrics_date_bounds"),
