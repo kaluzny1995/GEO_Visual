@@ -10,10 +10,9 @@ render_sidebar()
 
 
 def _render_cards(cards: tuple[DashboardCard, ...]) -> None:
-    """Render one bordered card per dashboard or map page."""
+    """Render one collapsible card per dashboard or map page."""
     for card in cards:
-        with st.container(border=True):
-            st.markdown(f"#### {card.icon} {card.title}")
+        with st.expander(f"{card.icon} {card.title}", expanded=False):
             st.markdown(card.description)
             st.page_link(
                 card.page_path,

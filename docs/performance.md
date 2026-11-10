@@ -61,8 +61,9 @@ enforces these limits on every dataframe query:
 - **Distribution cap** — the histogram query selects only
   `metric_name`, `metric_unit` and `metric_value`, and uses a dedicated
   `250 000`-row cap so the raw-value payload stays bounded.
-- **Map POI cap** — the US map query deduplicates events in SQL and is capped at
-  `50 000` POIs.
+- **Map POI cap** — the US map query deduplicates events in SQL, filters by
+  `event_start_date` in the database and is capped at `50 000` POIs. The date
+  picker bounds come from a separate two-row aggregate query.
 - `read_dataframe()` wraps the query in
   `SELECT * FROM (<query>) AS geo_visual_query LIMIT max_rows + 1` and raises
   `QueryTooLargeError` if the extra row exists. The full result never enters the

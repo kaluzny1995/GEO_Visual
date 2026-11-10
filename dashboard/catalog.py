@@ -131,12 +131,13 @@ MAPS: Final[tuple[DashboardCard, ...]] = (
         page_path="pages/9_United_States_Map.py",
         nav_label="United States",
         title="United States phenomenon map",
-        icon="🗺️",
+        icon="🇺🇸",
         description=(
             "Interactive map of natural-phenomenon locations across the United States "
-            "from `geo.phenomenons_us_vw`. Emoji markers identify the phenomenon and "
-            "marker size shows the main metric intensity; hover reveals the event, "
-            "location, metric value, danger rating and dates."
+            "from `geo.phenomenons_us_vw`. Filter by event date range and phenomenon, "
+            "review per-phenomenon summary cards, and use the emoji markers whose size "
+            "shows the main metric; hover reveals the event, location, metric value, "
+            "danger rating and dates."
         ),
     ),
 )

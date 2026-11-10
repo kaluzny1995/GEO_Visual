@@ -3,10 +3,11 @@
 The **Phenomenon maps → United States** page plots natural-phenomenon
 locations across the United States from `geo.phenomenons_us_vw`. It is the
 first map dashboard in GEO_Visual and complements the per-phenomenon metric
-timelines and distributions.
+timelines and distributions. The dashboard, sidebar tab and welcome card use
+the 🇺🇸 icon.
 
-Open it at **<http://localhost:8501> → United States**, from the welcome-page
-map card, or via `pages/9_United_States_Map.py` in the source tree.
+Open it at **<http://localhost:8501> → United States**, from the collapsible
+welcome-page map card, or via `pages/9_United_States_Map.py` in the source tree.
 
 ## Data source
 
@@ -29,20 +30,59 @@ event**, choosing the row with the highest main metric value for each
 `event_ndesc` + location (volcanoes are grouped by `place_location` + location
 because their descriptions change between snapshots).
 
+## Page layout
+
+From top to bottom the page shows:
+
+1. the 🇺🇸 title and a short description
+2. the event date range, phenomenon multi-select and earthquake threshold
+3. one summary card per phenomenon
+4. the emoji marker-size legend with each phenomenon's observed value range
+5. the framed US map
+
+### Summary cards
+
+Each selected phenomenon gets a card above the map containing:
+
+- **POI count** — deduplicated events in the selected date range and filters
+- **Mean main metric** — the mean of the phenomenon's main metric with its unit
+- **Top region** — the `state_province` with the highest POI count, plus that
+  count; when no state is recorded, the card falls back to **United States**
+
+The cards use responsive CSS grid columns with larger count figures and smaller
+labels and detail rows.
+
+### Emoji size legend
+
+The size legend sits **above the map**. For every phenomenon it shows:
+
+- the phenomenon emoji rendered at that phenomenon's minimum marker size,
+  followed by the lowest observed main-metric value
+- an arrow
+- the same emoji rendered at the phenomenon's maximum marker size, followed by
+  the highest observed main-metric value
+- the main metric name and unit
+
+For example, a Fire range of 10–30 km² is shown with a small 🔥 next to `10`
+and a large 🔥 next to `30`. The legend uses emoji sizes rather than dots, so
+the encoding matches the map markers exactly. Phenomena without any main-metric
+values show `no values` at the minimum emoji size.
+
 ## Main metric and marker style
 
-| Emoji | Phenomenon | Main metric | Unit |
-|-------|------------|-------------|------|
-| ❄️ | Avalanche | `size` | destructive size class |
-| 🌵 | Drought | `area` | km² |
-| 🏚️ | Earthquake | `magnitude` | Mw |
-| 🔥 | Fire | `area` | km² |
-| 🌊 | Flood | `discharge` | m³/s |
-| ⛈️ | Storm | `wind speed` | km/h |
-| 🌋 | Volcano | `vei` | VEI |
+| Emoji | Phenomenon | Main metric | Unit | Emoji size range |
+|-------|------------|-------------|------|------------------|
+| ❄️ | Avalanche | `size` | destructive size class | 10–20 px |
+| 🌵 | Drought | `area` | km² | 12–22 px |
+| 🏚️ | Earthquake | `magnitude` | Mw | 6–14 px |
+| 🔥 | Fire | `area` | km² | 9–18 px |
+| 🌊 | Flood | `discharge` | m³/s | 10–21 px |
+| ⛈️ | Storm | `wind speed` | km/h | 11–21 px |
+| 🌋 | Volcano | `vei` | VEI | 12–24 px |
 
-Emojis are the actual markers and appear in the phenomenon selector, the
-Plotly legend and every tooltip.
+The ranges are configured individually per phenomenon in
+`dashboard/us_map.py` (`PhenomenonStyle.min_size` / `max_size`), so dense layers
+such as earthquakes can use smaller emojis while volcanoes remain prominent.
 
 ## Size scale
 
@@ -54,19 +94,31 @@ phenomenon**:
 - 1 = highest observed main metric value in the current selection
 
 **Marker size is the intensity indicator**: small emoji = low, large emoji =
-high. Emojis identify the phenomenon and keep their native colours; there is
-no colour scale. A size legend sits to the right of the map, and the legend
-table below it lists the actual observed range and unit for each phenomenon.
+high. Each phenomenon maps that 0–1 intensity onto its own configured emoji
+size range. Emojis identify the phenomenon and keep their native colours; there
+is no colour scale.
 
 Points without a main metric value — currently unrated avalanche zones — are
-shown with the same emoji at the smallest size and reduced opacity.
+shown with the same emoji at that phenomenon's minimum size and reduced opacity.
 
 ## Filters
 
+- **Event date range** — defaults to the first and last `event_start_date` in
+  the view. Both dates are inclusive; the map query selects events whose start
+  date falls inside the range. The bounds come from
+  `sql/phenomenons_us_map_date_bounds.sql`.
 - **Phenomena** — multi-select, defaulting to all seven phenomena.
 - **Minimum earthquake magnitude** — appears when Earthquake is selected.
   Defaults to **M2.5**; lower it to show smaller earthquakes or raise it to
-  reduce clutter. The query caps the map at 50,000 POIs.
+  reduce clutter.
+
+The map query is capped at 50,000 POIs.
+
+## Map frame
+
+The Plotly figure adds a visible rectangle around the map area using a
+`xref="paper"` / `yref="paper"` shape. The frame uses a slate outline that
+contrasts with the dark page background and is drawn below the map traces.
 
 ## Hover tooltip
 
@@ -88,6 +140,7 @@ The map uses one guarded query from `sql/phenomenons_us_map.sql` through
 WITH main_metric AS (
     SELECT event_category,
            event_subcategory,
+           event_ndesc,
            split_part(event_ndesc, E'\n\n', 1) AS event_title,
            latitude,
            longitude,
@@ -113,6 +166,8 @@ WITH main_metric AS (
     FROM geo.phenomenons_us_vw
     WHERE latitude IS NOT NULL
       AND longitude IS NOT NULL
+      AND event_start_date >= CAST(:start_date AS date)
+      AND event_start_date < CAST(:end_date AS date) + INTERVAL '1 day'
 ),
 ranked AS (
     SELECT main_metric.*,
@@ -150,30 +205,33 @@ WHERE row_number = 1
 ORDER BY event_category, event_start_date DESC NULLS LAST;
 ```
 
-The query binds `:min_magnitude` and is capped at 50,000 rows. It selects only
-the columns needed for the map and tooltip and follows the
-[views-only contract](performance.md).
+The query binds `:min_magnitude`, `:start_date` and `:end_date` and is capped at
+50,000 rows. It selects only the columns needed for the map, tooltip and cards
+and follows the [views-only contract](performance.md).
 
 ## Page behaviour
 
 - US Albers projection with dark land, state and coastline outlines
-- One map trace per phenomenon with emoji text markers and a category legend
-- Emoji markers with a normalised main-metric size scale
-- Category multi-select and earthquake magnitude threshold
+- Visible Plotly rectangle frame around the map area
+- Emoji markers with per-phenomenon marker-size ranges
+- Normalised main-metric size scale and an emoji size legend above the map
+- Summary cards with POI count, mean main metric and top region
+- Event date range, category multi-select and earthquake magnitude threshold
 - Small, low-opacity points for missing main metric values
-- Legend table with observed metric ranges and POI counts
-- Empty and error states for an empty selection or failed query
+- Empty and error states for unavailable date bounds, an empty selection or a
+  failed query
 
 ## Code map
 
 | File | Role |
 |------|------|
 | `pages/9_United_States_Map.py` | Streamlit page entry — page config, shared sidebar, render call |
-| `dashboard/us_map.py` | Query loading, normalisation, hover text and Plotly map builder |
+| `dashboard/us_map.py` | Date/filter loading, normalisation, cards, size legend, hover text and Plotly map builder |
 | `dashboard/catalog.py` | `MAPS` metadata for the welcome card and **Phenomenon maps** navigation |
-| `sql/phenomenons_us_map.sql` | Deduplicated US POI query with `:min_magnitude` |
+| `sql/phenomenons_us_map.sql` | Deduplicated US POI query with `:min_magnitude`, `:start_date`, `:end_date` |
+| `sql/phenomenons_us_map_date_bounds.sql` | First and last event start date for the date picker |
 | `utils/layout.py` | Shared page config and collapsible **Phenomenon maps** navigation |
-| `test/test_us_map.py` | Map query, intensity, tooltip, figure and page tests |
+| `test/test_us_map.py` | Date bounds, map query, sizes, cards, legend, tooltip, figure and page tests |
 
 ## Testing
 
@@ -183,6 +241,7 @@ The map is covered without a live database:
 pytest test/test_us_map.py test/test_sql.py
 ```
 
-Tests cover query parameter forwarding, per-phenomenon intensity
-normalisation, emoji text markers, hover text, size scale, missing-metric
-markers, empty-map annotations and the page controls.
+Tests cover date-bounds loading, query parameter forwarding, per-phenomenon
+intensity normalisation and emoji size ranges, summary-card content, the emoji
+size legend, hover text, the map frame, missing-metric markers, empty-map
+annotations, the page date filter and the page controls.

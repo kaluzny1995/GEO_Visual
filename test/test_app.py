@@ -17,7 +17,7 @@ def run_app() -> AppTest:
 
 
 def test_main_area_contains_the_welcome_header() -> None:
-    """The main area describes the project and lists the dashboards and maps."""
+    """The main area describes the project and lists the collapsible cards."""
     config = AppConfig.from_json()
     at = run_app()
 
@@ -26,6 +26,10 @@ def test_main_area_contains_the_welcome_header() -> None:
     assert at.main.title[0].value == f"{config.app.page_icon} {config.app.title}"
     assert config.app.subtitle in [markdown.value for markdown in at.main.markdown]
     assert [subheader.value for subheader in at.main.subheader] == ["Dashboards", "Phenomenon maps"]
+    assert [expander.label for expander in at.main.expander] == [
+        f"{card.icon} {card.title}" for card in (*DASHBOARDS, *MAPS)
+    ]
+    assert not any(expander.proto.expanded for expander in at.main.expander)
     assert [link.label for link in at.main.page_link] == [
         *(f"Open {dashboard.title}" for dashboard in DASHBOARDS),
         *(f"Open {map_page.title}" for map_page in MAPS),
@@ -38,12 +42,12 @@ def test_main_area_contains_the_welcome_header() -> None:
 
 @pytest.mark.parametrize("card", (*DASHBOARDS, *MAPS), ids=lambda card: card.nav_label)
 def test_main_area_contains_each_dashboard_or_map_card(card: DashboardCard) -> None:
-    """Every configured dashboard and map gets a welcome card and an open link."""
+    """Every configured dashboard and map gets a collapsible card and an open link."""
     at = run_app()
     markdown_values = [markdown.value for markdown in at.main.markdown]
 
-    assert f"#### {card.icon} {card.title}" in markdown_values
     assert card.description in markdown_values
+    assert any(expander.label == f"{card.icon} {card.title}" for expander in at.main.expander)
     assert any(link.label == f"Open {card.title}" for link in at.main.page_link)
 
 

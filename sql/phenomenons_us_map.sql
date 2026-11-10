@@ -1,5 +1,8 @@
 -- One map point per natural-phenomenon event in the US view.
--- Bind parameter: :min_magnitude  minimum earthquake magnitude to include.
+-- Bind parameters:
+--   :min_magnitude  minimum earthquake magnitude to include
+--   :start_date     first event start date to include (inclusive)
+--   :end_date       last event start date to include (inclusive)
 WITH main_metric AS (
     SELECT event_category,
            event_subcategory,
@@ -29,6 +32,8 @@ WITH main_metric AS (
     FROM geo.phenomenons_us_vw
     WHERE latitude IS NOT NULL
       AND longitude IS NOT NULL
+      AND event_start_date >= CAST(:start_date AS date)
+      AND event_start_date < CAST(:end_date AS date) + INTERVAL '1 day'
 ),
 ranked AS (
     SELECT main_metric.*,
