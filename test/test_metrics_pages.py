@@ -19,7 +19,7 @@ from dashboard import (
     storm_timeline,
     volcano_timeline,
 )
-from dashboard.catalog import DASHBOARDS
+from dashboard.catalog import DASHBOARDS, MAPS
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_BOUNDS = (dt.date(2026, 11, 1), dt.date(2026, 11, 2))
@@ -218,12 +218,20 @@ def test_sidebar_keeps_navigation_and_connection_status(
     """The shared sidebar is available on every dashboard page."""
     at = run_page(config)
 
-    expected_labels = ["Start", *(dashboard.nav_label for dashboard in DASHBOARDS)]
+    expected_labels = [
+        "Start",
+        *(dashboard.nav_label for dashboard in DASHBOARDS),
+        *(map_page.nav_label for map_page in MAPS),
+    ]
     assert [link.label for link in at.sidebar.page_link] == expected_labels
-    assert [expander.label for expander in at.sidebar.expander] == ["Metric timelines and distributions"]
+    assert [expander.label for expander in at.sidebar.expander] == [
+        "Metric timelines and distributions",
+        "Phenomenon maps",
+    ]
     assert [link.label for link in at.sidebar.expander[0].page_link] == [
         dashboard.nav_label for dashboard in DASHBOARDS
     ]
+    assert [link.label for link in at.sidebar.expander[1].page_link] == [map_page.nav_label for map_page in MAPS]
     assert any(button.label == "Recheck connection" for button in at.sidebar.button)
     assert any("not configured" in warning.value.lower() for warning in at.sidebar.warning)
 

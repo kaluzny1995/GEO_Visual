@@ -2,24 +2,32 @@
 
 import streamlit as st
 
-from dashboard.catalog import DASHBOARDS
+from dashboard.catalog import DASHBOARDS, MAPS, DashboardCard
 from utils.layout import CONFIG, configure_page, render_sidebar
 
 configure_page()
 render_sidebar()
+
+
+def _render_cards(cards: tuple[DashboardCard, ...]) -> None:
+    """Render one bordered card per dashboard or map page."""
+    for card in cards:
+        with st.container(border=True):
+            st.markdown(f"#### {card.icon} {card.title}")
+            st.markdown(card.description)
+            st.page_link(
+                card.page_path,
+                label=f"Open {card.title}",
+                icon=card.icon,
+            )
+
 
 st.title(f"{CONFIG.app.page_icon} {CONFIG.app.title}")
 st.markdown(CONFIG.app.subtitle)
 
 st.divider()
 st.subheader("Dashboards")
+_render_cards(DASHBOARDS)
 
-for dashboard in DASHBOARDS:
-    with st.container(border=True):
-        st.markdown(f"#### {dashboard.icon} {dashboard.title}")
-        st.markdown(dashboard.description)
-        st.page_link(
-            dashboard.page_path,
-            label=f"Open {dashboard.title}",
-            icon=dashboard.icon,
-        )
+st.subheader("Phenomenon maps")
+_render_cards(MAPS)

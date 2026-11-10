@@ -79,8 +79,8 @@ DASHBOARDS: Final[tuple[DashboardCard, ...]] = (
         title="Fire metrics timeline & distribution",
         icon="🔥",
         description=_description(
-            "Daily snapshots from `geo.metrics_fire_vw`: burned area, percent contained, "
-            "geometry counts and any other numeric fire metric published by GEO_ETL."
+            "Daily snapshots from `geo.metrics_fire_vw`: burned area, percent contained "
+            "and any other numeric fire metric published by GEO_ETL."
         ),
     ),
     DashboardCard(
@@ -89,8 +89,8 @@ DASHBOARDS: Final[tuple[DashboardCard, ...]] = (
         title="Flood metrics timeline & distribution",
         icon="🌊",
         description=_description(
-            "Daily snapshots from `geo.metrics_flood_vw`: discharge, threshold, baseline "
-            "days, exceedance ratio, magnitude and any other numeric flood metric."
+            "Daily snapshots from `geo.metrics_flood_vw`: discharge, threshold, "
+            "exceedance ratio and any other numeric flood metric."
         ),
     ),
     DashboardCard(
@@ -121,7 +121,22 @@ DASHBOARDS: Final[tuple[DashboardCard, ...]] = (
         icon="🌋",
         description=_description(
             "Daily snapshots from `geo.metrics_volcano_vw`: VEI, Smithsonian volcano "
-            "number, casualties, damage, magnitude and any other numeric volcano metric."
+            "number and any other numeric volcano metric."
+        ),
+    ),
+)
+
+MAPS: Final[tuple[DashboardCard, ...]] = (
+    DashboardCard(
+        page_path="pages/9_United_States_Map.py",
+        nav_label="United States",
+        title="United States phenomenon map",
+        icon="🗺️",
+        description=(
+            "Interactive map of natural-phenomenon locations across the United States "
+            "from `geo.phenomenons_us_vw`. Emoji markers identify the phenomenon and "
+            "marker size shows the main metric intensity; hover reveals the event, "
+            "location, metric value, danger rating and dates."
         ),
     ),
 )

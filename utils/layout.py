@@ -4,7 +4,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from dashboard.catalog import DASHBOARDS
+from dashboard.catalog import DASHBOARDS, MAPS
 from model.config.app_config import AppConfig
 from utils.database import cached_connection_status, clear_connection_cache
 
@@ -47,6 +47,17 @@ def render_sidebar() -> None:
                     ),
                     label=dashboard.nav_label,
                     icon=dashboard.icon,
+                )
+        with st.expander("Phenomenon maps", expanded=True):
+            for map_page in MAPS:
+                st.page_link(
+                    st.Page(
+                        str(PROJECT_DIR / map_page.page_path),
+                        title=map_page.nav_label,
+                        icon=map_page.icon,
+                    ),
+                    label=map_page.nav_label,
+                    icon=map_page.icon,
                 )
         st.divider()
 

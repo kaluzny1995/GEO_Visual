@@ -57,7 +57,12 @@ SQL_FILE_CASES += [
         "metrics_distribution",
         ("{view_name}", ":start_date", ":end_date", "metric_value", "SELECT"),
         id="distribution",
-    )
+    ),
+    pytest.param(
+        "phenomenons_us_map",
+        (":min_magnitude", "geo.phenomenons_us_vw", "row_number", "metric_name = 'size'"),
+        id="us-map",
+    ),
 ]
 
 
