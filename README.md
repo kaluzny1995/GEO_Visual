@@ -12,12 +12,14 @@ GEO_Visual is the presentation layer of the GIS data pipeline, sitting alongside
 the analysis-ready tables that GEO_ETL loads into Supabase (PostgreSQL) and turns them
 into interactive Streamlit pages.
 
-The repository ships a welcome page, eight natural-phenomenon dashboards and a
-United States phenomenon map. The timeline dashboards cover avalanche, drought,
-earthquake, fire, flood, iceberg, storm and volcano; each pairs a daily-snapshot
-**timeline** from the matching `geo.metrics_*_vw` view with a **value
-distribution histogram**, one pair per metric. The map plots US POIs from
-`geo.phenomenons_us_vw`. Supabase connection helpers, a shared sidebar and
+The repository ships a welcome page, eight natural-phenomenon metric dashboards
+and nine area phenomenon maps. The timeline dashboards cover avalanche,
+drought, earthquake, fire, flood, iceberg, storm and volcano; each pairs a
+daily-snapshot **timeline** from the matching `geo.metrics_*_vw` view with a
+**value distribution histogram**, one pair per metric. The maps plot POIs from
+the `geo.phenomenons_<area>_vw` views for the United States, Canada, Central &
+South America, Europe, Africa, Asia, Australia & Oceania, Russia and
+international waters. Supabase connection helpers, a shared sidebar and
 performance guardrails are used by every page and are ready for the remaining
 data exploration and data-quality pages.
 
@@ -27,7 +29,7 @@ serialization. The app queries views in the `geo` schema only — base and `_etl
 tables remain owned by GEO_ETL. See [Performance](docs/performance.md) for the
 trade-offs and the guardrails that keep large result sets out of the Streamlit process.
 
-> Status: welcome page, Supabase connectivity, all eight metric timelines/distributions and the United States phenomenon map are in place.
+> Status: welcome page, Supabase connectivity, all eight metric timelines/distributions and all nine area phenomenon maps are in place.
 
 ## Features
 
@@ -57,12 +59,16 @@ trade-offs and the guardrails that keep large result sets out of the Streamlit p
   `threshold` and `exceedance_ratio` (`baseline_days` and `magnitude` hidden),
   storm exposes all of its series, iceberg shows surface/geometry, and volcano
   shows `vei` and `vnum` (casualties, damage and magnitude hidden)
-- **United States phenomenon map** — 🇺🇸 POI map from
-  `geo.phenomenons_us_vw` with an event date range, emoji markers, individually
-  configured marker-size ranges per phenomenon, an emoji size legend above the
-  map, summary cards with POI count, mean main metric and top region, a framed
-  map area, hover metrics, category filters and an earthquake magnitude
-  threshold
+- **Area phenomenon maps** — nine POI maps from the
+  `geo.phenomenons_<area>_vw` views with event date ranges, emoji markers,
+  individually configured marker-size ranges per phenomenon, summary cards with
+  POI count, mean main metric and top state/province/country/area, a framed map
+  area, a geo-specific projection, hover metrics, dynamic category filters and
+  an earthquake magnitude threshold; the emoji size legend sits below each map
+  and the **Phenomenon locations for &lt;area&gt;** heading sits above the filters
+- **Shared map engine** — `dashboard/phenomenon_map.py` renders all nine area
+  maps; `dashboard/map_configs.py` keeps each page's view, title, icon, region
+  field, projection and zoom settings small and declarative
 - **Value distribution histograms** — each timeline is paired with a 20-bin
   histogram of every raw value for the visible metric series in the selected date range, computed from
   the shared `sql/metrics_distribution.sql` query
@@ -91,7 +97,7 @@ trade-offs and the guardrails that keep large result sets out of the Streamlit p
   port 8501, with Supabase credentials injected at runtime
 - **Dev tooling** — ruff (lint + format), mypy, pytest and tox
 - **Tests without a database** — mocked engine, chart/map builders and Streamlit's
-  `AppTest` cover the welcome page, all timelines/distributions and the US map
+  `AppTest` cover the welcome page, all timelines/distributions and all nine area maps
 
 ## Dashboards
 
@@ -121,15 +127,22 @@ trade-offs and the guardrails that keep large result sets out of the Streamlit p
 
 ## Maps
 
-- **United States phenomenon map** — 🇺🇸 POIs for avalanche, drought,
-  earthquake, fire, flood, storm and volcano events from
-  `geo.phenomenons_us_vw`. Filter by event date range and phenomenon, review
-  per-phenomenon cards with POI count, mean main metric and top region, and read
-  the emoji size legend above the framed map. Each phenomenon has its own emoji
-  marker and size range; marker size encodes the normalised main metric, and
-  hover shows the event, location, main metric, danger rating and dates. See
-  [United States phenomenon map](docs/united-states-map.md) for the
-  deduplication rules, main-metric mapping, per-phenomenon size ranges and SQL.
+- **United States** — 🇺🇸 `geo.phenomenons_us_vw`
+- **Canada** — 🇨🇦 `geo.phenomenons_ca_vw`
+- **Central & South America** — 🌎 `geo.phenomenons_cs_amer_vw`
+- **Europe** — 🇪🇺 `geo.phenomenons_europe_vw`
+- **Africa** — 🌍 `geo.phenomenons_africa_vw`
+- **Asia** — 🌏 `geo.phenomenons_asia_vw`
+- **Australia & Oceania** — 🇦🇺 `geo.phenomenons_aus_oc_vw`
+- **Russia** — 🇷🇺 `geo.phenomenons_ru_vw`
+- **International waters** — 🌊 `geo.phenomenons_waters_vw`
+
+Every map supports an event date range, dynamic phenomenon categories, a
+framed geo-specific map, per-phenomenon summary cards, emoji markers whose size
+encodes the normalised main metric, a size legend below the map, hover details
+and an earthquake magnitude threshold. See
+[Phenomenon maps](docs/phenomenon-maps.md) for the shared deduplication rules,
+main-metric mapping, per-phenomenon size ranges, projections and SQL.
 
 ## Tech Stack
 
@@ -163,7 +176,15 @@ GEO_Visual/
 │   ├── 6_Iceberg_Timeline.py               # Iceberg dashboard page
 │   ├── 7_Storm_Timeline.py                 # Storm dashboard page
 │   ├── 8_Volcano_Timeline.py               # Volcano dashboard page
-│   └── 9_United_States_Map.py              # United States phenomenon map page
+│   ├── 9_United_States_Map.py              # United States phenomenon map page
+│   ├── 10_Canada_Map.py                    # Canada phenomenon map page
+│   ├── 11_Central_South_America_Map.py     # Central & South America map page
+│   ├── 12_Europe_Map.py                    # Europe phenomenon map page
+│   ├── 13_Africa_Map.py                    # Africa phenomenon map page
+│   ├── 14_Asia_Map.py                      # Asia phenomenon map page
+│   ├── 15_Australia_Oceania_Map.py         # Australia & Oceania map page
+│   ├── 16_Russia_Map.py                    # Russia phenomenon map page
+│   └── 17_International_Waters_Map.py      # International waters map page
 ├── dashboard/
 │   ├── __init__.py
 │   ├── metrics_timeline.py                 # Shared timeline engine and Plotly charts
@@ -175,7 +196,8 @@ GEO_Visual/
 │   ├── iceberg_timeline.py                 # Iceberg dashboard configuration
 │   ├── storm_timeline.py                   # Storm dashboard configuration
 │   ├── volcano_timeline.py                 # Volcano dashboard configuration
-│   ├── us_map.py                           # United States map data, cards, size legend and figure
+│   ├── phenomenon_map.py                   # Shared area map engine
+│   ├── map_configs.py                      # Area view, title, icon, region and projection metadata
 │   └── catalog.py                          # Dashboard/map metadata for cards and navigation
 ├── sql/
 │   ├── avalanche_metrics_date_bounds.sql   # Avalanche date picker bounds query
@@ -195,8 +217,8 @@ GEO_Visual/
 │   ├── volcano_metrics_date_bounds.sql     # Volcano date picker bounds query
 │   ├── volcano_metrics_timeline.sql        # Parametrized volcano timeline query
 │   ├── metrics_distribution.sql            # Shared raw values query for histograms
-│   ├── phenomenons_us_map.sql              # Deduplicated US POI query for the map
-│   └── phenomenons_us_map_date_bounds.sql  # US map event date picker bounds
+│   ├── phenomenons_map.sql                 # Shared deduplicated area POI query
+│   └── phenomenons_map_date_bounds.sql     # Shared date and category metadata query
 ├── config.json                             # App metadata and database pool/query limits
 ├── error.py                                # QueryTooLargeError
 ├── .streamlit/
@@ -206,7 +228,7 @@ GEO_Visual/
 │   ├── drought-timeline.md                 # Drought dashboard query and aggregation rules
 │   ├── earthquake-timeline.md              # Earthquake dashboard query and aggregation rules
 │   ├── phenomena-timelines.md              # Fire, flood, iceberg, storm and volcano timelines & distributions
-│   ├── united-states-map.md                # US map query, date filter, cards, size scale and hover
+│   ├── phenomenon-maps.md                  # All area maps: views, projections, cards and size scale
 │   └── performance.md                      # Direct-Postgres rationale and views-only query rules
 ├── model/
 │   └── config/
@@ -225,7 +247,7 @@ GEO_Visual/
 │   ├── provider/supabase_postgres/         # Provider behavior with a mocked engine
 │   ├── test_app.py                         # Welcome page via Streamlit AppTest
 │   ├── test_metrics_pages.py               # All eight timeline and distribution pages via AppTest
-│   ├── test_us_map.py                      # US map date bounds, cards, legend, figure and page tests
+│   ├── test_phenomenon_map.py              # All area maps: metadata, cards, legend, projections and pages
 │   ├── test_database.py                    # Connection status handling
 │   ├── test_project_layout.py              # Repository contract checks
 │   └── test_sql.py                         # SQL files, bind parameters and loader
@@ -265,9 +287,9 @@ Streamlit opens at <http://localhost:8501>. The welcome page renders without a
 database; the sidebar reports if Supabase is not configured. Open the
 appropriate dashboard from the collapsible welcome cards, the **Metric
 timelines and distributions** sidebar group, or the **Phenomenon maps** group.
-Timelines read their matching `geo.metrics_*_vw` view and the map reads
-`geo.phenomenons_us_vw`; without credentials or data each page shows an empty
-state instead of failing.
+Timelines read their matching `geo.metrics_*_vw` view and each map reads its
+matching `geo.phenomenons_<area>_vw` view; without credentials or data each page
+shows an empty state instead of failing.
 
 ### Docker (GEO_E2E stack)
 
@@ -381,9 +403,10 @@ or network access is required. `test/test_app.py` renders the real `app.py` thro
 Streamlit's `AppTest` and checks the welcome page and every collapsible
 dashboard/map card; `test/test_metrics_pages.py` parametrizes all eight
 natural-phenomenon pages and checks their timelines, histograms, KPIs, empty
-states and friendly error cards. `test/test_us_map.py` covers the US map date
-bounds, query filters, per-phenomenon size ranges, summary cards, emoji size
-legend, map frame, hover text, empty map and page controls.
+states and friendly error cards. `test/test_phenomenon_map.py` parametrizes all
+nine area maps and covers metadata/category discovery, per-area SQL formatting,
+query filters, per-phenomenon size ranges, summary cards, the emoji size legend,
+map frames and projections, dateline wrapping, hover text and page controls.
 `test/dashboard/test_metrics_timeline.py` covers the shared engine,
 timeline/histogram builders and aggregation cases;
 `test/dashboard/test_dashboard_configs.py` parametrizes the eight dashboard

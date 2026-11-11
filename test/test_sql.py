@@ -59,21 +59,24 @@ SQL_FILE_CASES += [
         id="distribution",
     ),
     pytest.param(
-        "phenomenons_us_map",
+        "phenomenons_map",
         (
+            "{view_name}",
             ":min_magnitude",
             ":start_date",
             ":end_date",
-            "geo.phenomenons_us_vw",
             "row_number",
             "metric_name = 'size'",
+            "metric_name = 'surface'",
+            "is_main_metric DESC",
+            "CASE WHEN is_main_metric THEN metric_name",
         ),
-        id="us-map",
+        id="area-map",
     ),
     pytest.param(
-        "phenomenons_us_map_date_bounds",
-        ("to_char(min(event_start_date)", "to_char(max(event_start_date)", "geo.phenomenons_us_vw"),
-        id="us-map-date-bounds",
+        "phenomenons_map_date_bounds",
+        ("{view_name}", "to_char(min(event_start_date)", "array_agg(DISTINCT event_category"),
+        id="area-map-date-bounds",
     ),
 ]
 

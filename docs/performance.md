@@ -49,7 +49,7 @@ enforces these limits on every dataframe query:
 |-----------|---------|-------|
 | Row cap per query | `50 000` | `database.max_rows` in `config.json` |
 | Distribution query cap | `250 000` | `DISTRIBUTION_MAX_ROWS` in `dashboard/metrics_timeline.py` |
-| US map POI cap | `50 000` | `MAP_MAX_ROWS` in `dashboard/us_map.py` |
+| Area map POI cap | `50 000` | `MAP_MAX_ROWS` in `dashboard/phenomenon_map.py` |
 | PostgreSQL statement timeout | `30 000 ms` | `database.statement_timeout_ms` |
 | Result cache TTL | `300 s` | `database.cache_ttl_seconds` |
 | Result cache entries | `32` | `database.cache_max_entries` |
@@ -61,9 +61,10 @@ enforces these limits on every dataframe query:
 - **Distribution cap** — the histogram query selects only
   `metric_name`, `metric_unit` and `metric_value`, and uses a dedicated
   `250 000`-row cap so the raw-value payload stays bounded.
-- **Map POI cap** — the US map query deduplicates events in SQL, filters by
+- **Map POI cap** — each area map query deduplicates events in SQL, filters by
   `event_start_date` in the database and is capped at `50 000` POIs. The date
-  picker bounds come from a separate two-row aggregate query.
+  and category picker metadata comes from a separate one-row aggregate query per
+  area view.
 - `read_dataframe()` wraps the query in
   `SELECT * FROM (<query>) AS geo_visual_query LIMIT max_rows + 1` and raises
   `QueryTooLargeError` if the extra row exists. The full result never enters the

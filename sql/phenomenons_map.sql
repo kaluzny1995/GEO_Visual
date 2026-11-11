@@ -1,4 +1,5 @@
--- One map point per natural-phenomenon event in the US view.
+-- One map point per natural-phenomenon event in one area view.
+-- The {view_name} placeholder is filled from the map configuration.
 -- Bind parameters:
 --   :min_magnitude  minimum earthquake magnitude to include
 --   :start_date     first event start date to include (inclusive)
@@ -10,6 +11,7 @@ WITH main_metric AS (
            split_part(event_ndesc, E'\n\n', 1) AS event_title,
            latitude,
            longitude,
+           country_code,
            state_province,
            place_location,
            danger_rating,
@@ -25,11 +27,12 @@ WITH main_metric AS (
                WHEN 'Earthquake' THEN metric_name = 'magnitude' AND metric_unit = 'Mw'
                WHEN 'Fire' THEN metric_name = 'area'
                WHEN 'Flood' THEN metric_name = 'discharge'
+               WHEN 'Iceberg' THEN metric_name = 'surface'
                WHEN 'Storm' THEN metric_name = 'wind speed'
                WHEN 'Volcano' THEN metric_name = 'vei'
                ELSE FALSE
            END AS is_main_metric
-    FROM geo.phenomenons_us_vw
+    FROM {view_name}
     WHERE latitude IS NOT NULL
       AND longitude IS NOT NULL
       AND event_start_date >= CAST(:start_date AS date)
@@ -45,27 +48,31 @@ ranked AS (
                             END,
                             latitude,
                             longitude
-               ORDER BY metric_value DESC NULLS LAST,
+               ORDER BY is_main_metric DESC,
+                        metric_value DESC NULLS LAST,
                         event_start_date DESC NULLS LAST
            ) AS row_number
     FROM main_metric
-    WHERE is_main_metric
 )
 SELECT event_category,
        event_subcategory,
        event_title,
        latitude,
        longitude,
+       country_code,
        state_province,
        place_location,
        danger_rating,
-       metric_name,
-       metric_value,
-       metric_unit,
+       CASE WHEN is_main_metric THEN metric_name END AS metric_name,
+       CASE WHEN is_main_metric THEN metric_value END AS metric_value,
+       CASE WHEN is_main_metric THEN metric_unit END AS metric_unit,
        other_metrics,
        event_start_date,
        event_end_date
 FROM ranked
 WHERE row_number = 1
-  AND (event_category <> 'Earthquake' OR metric_value >= :min_magnitude)
+  AND (
+      event_category <> 'Earthquake'
+      OR (is_main_metric AND metric_value >= :min_magnitude)
+  )
 ORDER BY event_category, event_start_date DESC NULLS LAST;

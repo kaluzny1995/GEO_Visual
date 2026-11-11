@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 from typing import Final
 
+from dashboard.map_configs import MAP_CONFIGS
+
 
 @dataclass(frozen=True)
 class DashboardCard:
@@ -126,18 +128,13 @@ DASHBOARDS: Final[tuple[DashboardCard, ...]] = (
     ),
 )
 
-MAPS: Final[tuple[DashboardCard, ...]] = (
+MAPS: Final[tuple[DashboardCard, ...]] = tuple(
     DashboardCard(
-        page_path="pages/9_United_States_Map.py",
-        nav_label="United States",
-        title="United States phenomenon map",
-        icon="🇺🇸",
-        description=(
-            "Interactive map of natural-phenomenon locations across the United States "
-            "from `geo.phenomenons_us_vw`. Filter by event date range and phenomenon, "
-            "review per-phenomenon summary cards, and use the emoji markers whose size "
-            "shows the main metric; hover reveals the event, location, metric value, "
-            "danger rating and dates."
-        ),
-    ),
+        page_path=config.page_path,
+        nav_label=config.nav_label,
+        title=config.title,
+        icon=config.icon,
+        description=config.description,
+    )
+    for config in MAP_CONFIGS
 )

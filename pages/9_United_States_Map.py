@@ -1,8 +1,11 @@
 """Streamlit page: United States phenomenon map."""
 
-from dashboard.us_map import PAGE_ICON, PAGE_TITLE, render
+from dashboard.map_configs import MAP_CONFIGS_BY_KEY
+from dashboard.phenomenon_map import render_map
 from utils.layout import CONFIG, configure_page, render_sidebar
 
-configure_page(page_title=f"{PAGE_TITLE} · {CONFIG.app.title}", page_icon=PAGE_ICON)
+MAP = MAP_CONFIGS_BY_KEY["us"]
+
+configure_page(page_title=f"{MAP.title} · {CONFIG.app.title}", page_icon=MAP.icon)
 render_sidebar()
-render()
+render_map(MAP)
