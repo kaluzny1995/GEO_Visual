@@ -62,13 +62,16 @@ trade-offs and the guardrails that keep large result sets out of the Streamlit p
 - **Area phenomenon maps** — nine POI maps from the
   `geo.phenomenons_<area>_vw` views with event date ranges, emoji markers,
   individually configured marker-size ranges per phenomenon, summary cards with
-  POI count, mean main metric and top state/province/country/area, a framed map
-  area, a geo-specific projection, hover metrics, dynamic category filters and
-  an earthquake magnitude threshold; the emoji size legend sits below each map
-  and the **Phenomenon locations for &lt;area&gt;** heading sits above the filters
+  POI count, mean main metric and the top state/province/country/area using full
+  names, a framed map area, a geo-specific projection, structured hover metrics,
+  dynamic category filters and an earthquake magnitude threshold; each metric
+  has its own dark-theme text colour scale, the emoji size/text colour legend
+  sits below each map and the **Phenomenon locations for &lt;area&gt;** heading
+  sits above the filters
 - **Shared map engine** — `dashboard/phenomenon_map.py` renders all nine area
   maps; `dashboard/map_configs.py` keeps each page's view, title, icon, region
-  field, projection and zoom settings small and declarative
+  field, projection and zoom settings small and declarative, and
+  `dashboard/region_names.py` converts ISO codes to full country/region names
 - **Value distribution histograms** — each timeline is paired with a 20-bin
   histogram of every raw value for the visible metric series in the selected date range, computed from
   the shared `sql/metrics_distribution.sql` query
@@ -139,10 +142,13 @@ trade-offs and the guardrails that keep large result sets out of the Streamlit p
 
 Every map supports an event date range, dynamic phenomenon categories, a
 framed geo-specific map, per-phenomenon summary cards, emoji markers whose size
-encodes the normalised main metric, a size legend below the map, hover details
-and an earthquake magnitude threshold. See
+encodes the normalised main metric, a size/text-colour legend below the map,
+hover details and an earthquake magnitude threshold. Tooltips use full country
+and region names, format the main metric as **Metric: value unit**, show every
+other metric on its own line and hide danger/percentile fields. See
 [Phenomenon maps](docs/phenomenon-maps.md) for the shared deduplication rules,
-main-metric mapping, per-phenomenon size ranges, projections and SQL.
+main-metric mapping, per-phenomenon size ranges, text colour scales, projections
+and SQL.
 
 ## Tech Stack
 
@@ -198,6 +204,7 @@ GEO_Visual/
 │   ├── volcano_timeline.py                 # Volcano dashboard configuration
 │   ├── phenomenon_map.py                   # Shared area map engine
 │   ├── map_configs.py                      # Area view, title, icon, region and projection metadata
+│   ├── region_names.py                     # Full ISO country and first-level region names
 │   └── catalog.py                          # Dashboard/map metadata for cards and navigation
 ├── sql/
 │   ├── avalanche_metrics_date_bounds.sql   # Avalanche date picker bounds query
@@ -405,8 +412,10 @@ dashboard/map card; `test/test_metrics_pages.py` parametrizes all eight
 natural-phenomenon pages and checks their timelines, histograms, KPIs, empty
 states and friendly error cards. `test/test_phenomenon_map.py` parametrizes all
 nine area maps and covers metadata/category discovery, per-area SQL formatting,
-query filters, per-phenomenon size ranges, summary cards, the emoji size legend,
-map frames and projections, dateline wrapping, hover text and page controls.
+query filters, full country/region names, per-phenomenon size ranges, text
+colour scales, structured tooltip formatting, percentile/danger filtering,
+summary cards, the emoji size legend, map frames and projections, dateline
+wrapping, hover text and page controls.
 `test/dashboard/test_metrics_timeline.py` covers the shared engine,
 timeline/histogram builders and aggregation cases;
 `test/dashboard/test_dashboard_configs.py` parametrizes the eight dashboard

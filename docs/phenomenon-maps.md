@@ -53,7 +53,7 @@ From top to bottom every map page shows:
 3. the event date range, phenomenon multi-select and earthquake threshold
 4. one summary card per phenomenon
 5. the framed area map
-6. the emoji marker-size legend below the map
+6. the emoji marker-size and text-colour legend below the map
 7. the size and earthquake-threshold captions
 
 The Plotly figure itself has no title; the locations heading above the filters
@@ -73,9 +73,12 @@ Each selected phenomenon gets a card above the map containing:
     `country_code` (label **Top country**)
   - International waters: `place_location` (label **Top area**)
 
-When the configured column is empty, the card falls back to the area name. The
-cards use responsive CSS grid columns with larger count figures and smaller
-labels and detail rows.
+When the configured column is empty, the card falls back to the area name. Region
+values always use full ISO country and first-level region names — for example
+**United States - California**, **Canada - Alberta** or
+**Mozambique - Zambézia** — never raw codes such as `US - CA`. The cards use
+responsive CSS grid columns with larger count figures and smaller labels and
+detail rows.
 
 ### Emoji size legend
 
@@ -87,10 +90,13 @@ The size legend sits **under the map**. For every phenomenon it shows:
 - the same emoji rendered at the phenomenon's maximum marker size, followed by
   the highest observed main-metric value
 - the main metric name and unit
+- a small gradient bar and **Text colour: low → high** label
 
 The legend uses emoji sizes rather than dots, so the encoding matches the map
-markers exactly. Phenomena without any main-metric values show `no values` at
-the minimum emoji size.
+markers exactly. The numeric values use each metric's text colour scale: the
+minimum value is shown in the scale's low colour and the maximum in its high
+colour. Phenomena without any main-metric values show `no values` at the
+minimum emoji size.
 
 ## Main metric and marker style
 
@@ -121,12 +127,36 @@ phenomenon**:
 
 **Marker size is the intensity indicator**: small emoji = low, large emoji =
 high. Each phenomenon maps that 0–1 intensity onto its own configured emoji
-size range. Emojis identify the phenomenon and keep their native colours; there
-is no colour scale.
+size range. Emojis identify the phenomenon and keep their native colours.
+
+### Text colour scale
+
+Each main metric also has its own three-stop text colour scale, tuned for the
+dark theme. The scale is applied to text, not to the emoji glyphs:
+
+- tooltip text for each point, coloured precisely from that point's metric
+  value
+- the mean metric value in each summary card
+- the minimum and maximum metric values in the size legend, plus the gradient
+  bar
+
+Because every metric has its own normalisation, the same 0–1 position uses the
+same palette within a metric. The palettes are:
+
+| Phenomenon | Low | Middle | High |
+|------------|-----|--------|------|
+| Avalanche | `#e0f2fe` | `#38bdf8` | `#2563eb` |
+| Drought | `#fef3c7` | `#fbbf24` | `#d97706` |
+| Earthquake | `#ede9fe` | `#a78bfa` | `#7c3aed` |
+| Fire | `#fef9c3` | `#fb923c` | `#ef4444` |
+| Flood | `#cffafe` | `#22d3ee` | `#3b82f6` |
+| Iceberg | `#ecfeff` | `#67e8f9` | `#06b6d4` |
+| Storm | `#ccfbf1` | `#2dd4bf` | `#0d9488` |
+| Volcano | `#fde68a` | `#fb923c` | `#f43f5e` |
 
 Points without a main metric value — for example unrated avalanche zones or
 volcanoes without VEI — are shown with the same emoji at that phenomenon's
-minimum size and reduced opacity.
+minimum size and reduced opacity, with neutral tooltip text.
 
 ## Filters
 
@@ -166,12 +196,19 @@ Every map adds a visible rectangle around the map area, drawn with a
 
 Hovering a point shows:
 
-- emoji and event title
-- place and state
-- main metric name, value and unit
-- danger rating
+- emoji and event title, with embedded country/region codes replaced by full
+  names
+- the place plus full country and first-level region names, for example
+  **Forest A · United States - California**
+- the main metric as **&lt;Metric&gt;: &lt;value&gt; &lt;unit&gt;**, for example
+  **Area: 10 km²**
+- every secondary metric on its own line, with underscores replaced by spaces
+  and field names capitalised
 - event dates
-- a compact preview of `other_metrics` when present
+
+Danger rating, alert level and colour code are not shown, and percentile metrics
+(`*_p50`, `*_p90`, `*_p95`, `*_p99`, `threshold_percentile`) plus any
+danger-related secondary metric are filtered out of tooltips.
 
 ## Query
 
@@ -203,7 +240,6 @@ WITH main_metric AS (
            country_code,
            state_province,
            place_location,
-           danger_rating,
            metric_name,
            metric_value,
            metric_unit,
@@ -251,7 +287,6 @@ SELECT event_category,
        country_code,
        state_province,
        place_location,
-       danger_rating,
        CASE WHEN is_main_metric THEN metric_name END AS metric_name,
        CASE WHEN is_main_metric THEN metric_value END AS metric_value,
        CASE WHEN is_main_metric THEN metric_unit END AS metric_unit,
@@ -276,7 +311,8 @@ follows the [views-only contract](performance.md).
 |------|------|
 | `pages/9_United_States_Map.py` … `pages/17_International_Waters_Map.py` | One thin Streamlit page per area |
 | `dashboard/map_configs.py` | Area metadata: view, page, title, icon, region field and projection |
-| `dashboard/phenomenon_map.py` | Shared map query, normalisation, cards, size legend, hover text and Plotly figure |
+| `dashboard/region_names.py` | Full ISO country and first-level region names used in cards and tooltips |
+| `dashboard/phenomenon_map.py` | Shared map query, normalisation, cards, text colour scales, size legend, hover text and Plotly figure |
 | `dashboard/catalog.py` | Builds `MAPS` cards from the area configurations |
 | `sql/phenomenons_map.sql` | Shared deduplicated POI query |
 | `sql/phenomenons_map_date_bounds.sql` | Shared date/category metadata query |
@@ -292,7 +328,8 @@ pytest test/test_phenomenon_map.py test/test_sql.py test/test_app.py
 ```
 
 Tests cover metadata loading and category ordering, per-area SQL formatting,
-query parameter forwarding, per-phenomenon intensity and emoji size ranges,
-summary-card region fields, the emoji size legend, map frames and projections,
-dateline wrapping, missing-metric markers, empty states, the page date filter
-and every area page through Streamlit's `AppTest`.
+query parameter forwarding, full country/region names, per-phenomenon intensity
+and emoji size ranges, text colour scales, structured tooltip formatting,
+percentile/danger filtering, summary-card region fields, the emoji size legend,
+map frames and projections, dateline wrapping, missing-metric markers, empty
+states, the page date filter and every area page through Streamlit's `AppTest`.

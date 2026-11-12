@@ -98,6 +98,7 @@ def test_streamlit_theme_is_dark_and_committed() -> None:
         "dashboard/metrics_timeline.py",
         "dashboard/phenomenon_map.py",
         "dashboard/map_configs.py",
+        "dashboard/region_names.py",
         "dashboard/catalog.py",
         "dashboard/__init__.py",
         "docs/avalanche-timeline.md",

@@ -3,7 +3,9 @@
 import datetime as dt
 import html
 import logging
+import re
 from dataclasses import dataclass
+from numbers import Real
 from typing import Final
 
 import pandas as pd
@@ -12,6 +14,12 @@ import streamlit as st
 
 import error
 from dashboard.map_configs import MapConfig
+from dashboard.region_names import (
+    contains_subdivision_name,
+    country_name,
+    region_name,
+    subdivision_name,
+)
 from utils.database import cached_query
 from utils.sql import load_sql
 
@@ -133,6 +141,22 @@ MAP_STYLES: Final = """
     font-size: 0.7rem;
     color: #94a3b8;
 }
+.area-map-color-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.2rem;
+}
+.area-map-color-bar {
+    width: 4.5rem;
+    height: 0.35rem;
+    border: 1px solid #475569;
+    border-radius: 999px;
+}
+.area-map-color-label {
+    font-size: 0.66rem;
+    color: #94a3b8;
+}
 </style>
 """
 
@@ -143,10 +167,11 @@ class PhenomenonStyle:
 
     Attributes:
         emoji: Emoji shown in the legend, hover text, selector and map.
-        metric_name: Main metric used for marker size.
+        metric_name: Main metric used for marker size and colour.
         metric_unit: Unit of the main metric.
         min_size: Emoji font size for the lowest observed main metric value.
         max_size: Emoji font size for the highest observed main metric value.
+        colors: Low, middle and high colours for the metric's colour scale.
     """
 
     emoji: str
@@ -154,6 +179,7 @@ class PhenomenonStyle:
     metric_unit: str
     min_size: int
     max_size: int
+    colors: tuple[str, str, str]
 
 
 @dataclass(frozen=True)
@@ -177,17 +203,47 @@ PHENOMENON_ORDER: Final = (
 )
 
 PHENOMENA: Final[dict[str, PhenomenonStyle]] = {
-    "Avalanche": PhenomenonStyle("❄️", "size", "destructive size class", 10, 20),
-    "Drought": PhenomenonStyle("🌵", "area", "km²", 12, 22),
-    "Earthquake": PhenomenonStyle("🏚️", "magnitude", "Mw", 6, 14),
-    "Fire": PhenomenonStyle("🔥", "area", "km²", 9, 18),
-    "Flood": PhenomenonStyle("🌊", "discharge", "m³/s", 10, 21),
-    "Iceberg": PhenomenonStyle("🧊", "surface", "N/m²", 13, 23),
-    "Storm": PhenomenonStyle("⛈️", "wind speed", "km/h", 11, 21),
-    "Volcano": PhenomenonStyle("🌋", "vei", "VEI", 12, 24),
+    "Avalanche": PhenomenonStyle("❄️", "size", "destructive size class", 10, 20, ("#e0f2fe", "#38bdf8", "#2563eb")),
+    "Drought": PhenomenonStyle("🌵", "area", "km²", 12, 22, ("#fef3c7", "#fbbf24", "#d97706")),
+    "Earthquake": PhenomenonStyle("🏚️", "magnitude", "Mw", 6, 14, ("#ede9fe", "#a78bfa", "#7c3aed")),
+    "Fire": PhenomenonStyle("🔥", "area", "km²", 9, 18, ("#fef9c3", "#fb923c", "#ef4444")),
+    "Flood": PhenomenonStyle("🌊", "discharge", "m³/s", 10, 21, ("#cffafe", "#22d3ee", "#3b82f6")),
+    "Iceberg": PhenomenonStyle("🧊", "surface", "N/m²", 13, 23, ("#ecfeff", "#67e8f9", "#06b6d4")),
+    "Storm": PhenomenonStyle("⛈️", "wind speed", "km/h", 11, 21, ("#ccfbf1", "#2dd4bf", "#0d9488")),
+    "Volcano": PhenomenonStyle("🌋", "vei", "VEI", 12, 24, ("#fde68a", "#fb923c", "#f43f5e")),
 }
 
-DEFAULT_STYLE: Final = PhenomenonStyle("📍", "metric", "", 8, 18)
+DEFAULT_STYLE: Final = PhenomenonStyle("📍", "metric", "", 8, 18, ("#cbd5e1", "#94a3b8", "#475569"))
+
+FIELD_LABELS: Final[dict[str, str]] = {
+    "area": "Area",
+    "baseline_days": "Baseline days",
+    "baseline_end": "Baseline end",
+    "baseline_start": "Baseline start",
+    "casualties": "Casualties",
+    "damage": "Damage",
+    "depth": "Depth",
+    "direction": "Direction",
+    "discharge": "Discharge",
+    "dist2land": "Distance to land",
+    "exceedance_ratio": "Exceedance ratio",
+    "geometry_count": "Geometry count",
+    "gust": "Gust",
+    "landfall": "Landfall",
+    "magnitude": "Magnitude",
+    "nst": "Stations",
+    "percent_contained": "Percent contained",
+    "pressure": "Pressure",
+    "saffir_simpson": "Saffir-Simpson",
+    "size": "Size",
+    "speed": "Speed",
+    "surface": "Surface",
+    "threshold": "Threshold",
+    "threshold_exceeded": "Threshold exceeded",
+    "vei": "VEI",
+    "vnum": "Volcano number",
+    "wind speed": "Wind speed",
+}
 
 
 def _style(category: str) -> PhenomenonStyle:
@@ -281,6 +337,10 @@ def load_map_data(
 
     frame["intensity"] = _normalise_intensity(frame)
     frame["text_size"] = _text_sizes(frame)
+    frame["hover_color"] = [
+        _metric_text_color(_style(category), intensity)
+        for category, intensity in zip(frame["event_category"], frame["intensity"], strict=True)
+    ]
     frame["hover_text"] = [_hover_text(row) for row in frame.itertuples(index=False)]
     return frame
 
@@ -330,9 +390,183 @@ def _format_metric_value(value: float) -> str:
     return f"{number:,.2f}".rstrip("0").rstrip(".")
 
 
+def _field_label(name: object) -> str:
+    """Return a human-readable field name with spaces instead of underscores."""
+    raw = str(name).strip().lower()
+    label = FIELD_LABELS.get(raw)
+    if label is None:
+        normalized = raw.replace("_", " ").strip()
+        label = FIELD_LABELS.get(normalized)
+    if label is None:
+        normalized = raw.replace("_", " ").strip()
+        label = normalized[:1].upper() + normalized[1:]
+    return label
+
+
+def _display_value(value: object) -> str:
+    """Replace underscores in a value and normalise whitespace for display."""
+    text = re.sub(r"\s+", " ", str(value).replace("_", " ")).strip()
+    if text.lower() in {"true", "false"}:
+        return text.capitalize()
+    return text
+
+
+def _should_hide_metric(name: object) -> bool:
+    """Return whether a secondary metric is a percentile or danger-related."""
+    normalized = str(name).strip().lower()
+    return (
+        "danger" in normalized
+        or "alert" in normalized
+        or "color_code" in normalized
+        or "colour_code" in normalized
+        or "percentile" in normalized
+        or re.search(r"_p\d+$", normalized) is not None
+    )
+
+
+def _string_value(value: object, default: str) -> str:
+    """Return a non-empty string value or a default."""
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return default
+
+
+PLACE_ABBREVIATIONS: Final[dict[str, str]] = {
+    "DRC": "Democratic Republic of the Congo",
+    "UK": "United Kingdom",
+    "USA": "United States",
+}
+
+
+def _replace_region_codes(text: str, country_code: object, state_province: object) -> str:
+    """Replace country, abbreviation and region codes in safe display positions."""
+    for abbreviation, full_name in PLACE_ABBREVIATIONS.items():
+        text = re.sub(rf"\b{re.escape(abbreviation)}\b", full_name, text)
+
+    country = country_name(country_code)
+    country_code_text = _string_value(country_code, "").upper()
+    subdivision = subdivision_name(country_code, state_province)
+    subdivision_code = _string_value(state_province, "").upper()
+
+    def replace_code(match: re.Match[str]) -> str:
+        code = match.group(1)
+        if code == country_code_text and country:
+            return match.group(0).replace(code, country)
+        candidate = subdivision_name(country_code, code)
+        if candidate:
+            return match.group(0).replace(code, candidate)
+        if code == subdivision_code and subdivision:
+            return match.group(0).replace(code, subdivision)
+        return match.group(0)
+
+    text = re.sub(r" - ([A-Z]{2,3})(:?)$", replace_code, text)
+    text = re.sub(r",\s*([A-Z]{2,3})$", replace_code, text)
+    stripped = text.strip()
+    if stripped.upper() == country_code_text and country:
+        return country
+    if stripped.upper() == subdivision_code and subdivision:
+        return subdivision
+    return text
+
+
+def _display_event_title(value: object, country_code: object, state_province: object) -> str:
+    """Clean an event title and replace embedded region codes with full names."""
+    title = _replace_region_codes(_display_value(value), country_code, state_province)
+    return title.rstrip(":").strip()
+
+
+def _other_metrics_lines(value: object) -> list[str]:
+    """Split a compact other-metrics string into one display line per metric."""
+    if not isinstance(value, str) or not value.strip():
+        return []
+    lines = []
+    for chunk in value.split(";"):
+        if ":" not in chunk:
+            continue
+        name, metric_value = chunk.split(":", 1)
+        name = name.strip()
+        metric_value = metric_value.strip()
+        if not name or not metric_value or _should_hide_metric(name):
+            continue
+        lines.append(f"{_field_label(name)}: {_display_value(metric_value)}")
+    return lines
+
+
+def _location_text(row: object) -> str:
+    """Return a location string with full country and region names."""
+    country_code = getattr(row, "country_code", None)
+    state_province = getattr(row, "state_province", None)
+    country = country_name(country_code)
+    region = region_name(country_code, state_province)
+    place = _replace_region_codes(
+        _display_value(getattr(row, "place_location", None) or ""),
+        country_code,
+        state_province,
+    )
+    if place.lower() in {"", "none", "nan", "<na>"}:
+        return region or "Unknown location"
+    if not region:
+        return place
+    if place.casefold() == region.casefold() or place.casefold() == country.casefold():
+        return region
+    if contains_subdivision_name(country_code, place):
+        if country and country.casefold() not in place.casefold():
+            return f"{place} · {country}"
+        return place
+    if country and country.casefold() in place.casefold():
+        if "," in place:
+            return place
+        province = region.removeprefix(f"{country} - ")
+        return f"{place} · {province}" if province != region else place
+    return f"{place} · {region}"
+
+
+def _interpolate_color(style: PhenomenonStyle, position: float) -> str:
+    """Interpolate a phenomenon's three-colour text scale at a 0-1 position."""
+    position = min(max(float(position), 0.0), 1.0)
+    if position <= 0.5:
+        start, end = style.colors[0], style.colors[1]
+        local = position / 0.5
+    else:
+        start, end = style.colors[1], style.colors[2]
+        local = (position - 0.5) / 0.5
+    start_rgb = [int(start[index : index + 2], 16) for index in (1, 3, 5)]
+    end_rgb = [int(end[index : index + 2], 16) for index in (1, 3, 5)]
+    mixed = [round(first + (second - first) * local) for first, second in zip(start_rgb, end_rgb, strict=True)]
+    return f"#{mixed[0]:02x}{mixed[1]:02x}{mixed[2]:02x}"
+
+
+def _metric_text_color(style: PhenomenonStyle, intensity: object) -> str:
+    """Return the metric-scale text colour for one point's intensity."""
+    if not isinstance(intensity, Real):
+        return "#cbd5e1"
+    value = float(intensity)
+    if pd.isna(value):
+        return "#cbd5e1"
+    return _interpolate_color(style, value)
+
+
+def _value_intensity(values: pd.Series, value: float) -> float:
+    """Return a value's 0-1 position within its phenomenon's observed range."""
+    low = float(values.min())
+    high = float(values.max())
+    if high <= low:
+        return 0.5
+    return (float(value) - low) / (high - low)
+
+
 def _top_region(part: pd.DataFrame, config: MapConfig) -> tuple[str, int]:
     """Return the configured country, state or area with the most POIs."""
-    regions = part[config.region_field].dropna().astype(str).str.strip()
+    if config.region_field == "state_province":
+        regions = part.apply(
+            lambda row: region_name(row["country_code"], row["state_province"]),
+            axis=1,
+        ).astype(str)
+    elif config.region_field == "country_code":
+        regions = part["country_code"].map(country_name).astype(str)
+    else:
+        regions = part["place_location"].map(_display_value).astype(str)
+
     regions = regions[(regions != "") & (regions.str.lower() != "nan")]
     if regions.empty:
         return config.fallback_region, len(part)
@@ -353,8 +587,11 @@ def _summary_cards_html(frame: pd.DataFrame, config: MapConfig) -> str:
         values = part["metric_value"].dropna()
         if values.empty:
             mean_value = "No values"
+            mean_color = "#94a3b8"
         else:
-            mean_value = f"{_format_metric_value(float(values.mean()))} {style.metric_unit}".rstrip()
+            mean = float(values.mean())
+            mean_value = f"{_format_metric_value(mean)} {style.metric_unit}".rstrip()
+            mean_color = _interpolate_color(style, _value_intensity(values, mean))
         region, region_count = _top_region(part, config)
         cards.append(
             '<div class="area-map-card">'
@@ -363,7 +600,7 @@ def _summary_cards_html(frame: pd.DataFrame, config: MapConfig) -> str:
             f'<div class="area-map-card-count">{len(part):,}</div>'
             '<div class="area-map-card-label">POIs</div>'
             f'<div class="area-map-card-detail"><span>Mean {html.escape(style.metric_name)}</span>'
-            f"<strong>{html.escape(mean_value)}</strong></div>"
+            f'<strong style="color:{mean_color}">{html.escape(mean_value)}</strong></div>'
             f'<div class="area-map-card-detail"><span>{html.escape(config.region_label)}</span>'
             f"<strong>{html.escape(region)} · {region_count:,}</strong></div>"
             "</div>"
@@ -394,23 +631,29 @@ def _size_legend_html(frame: pd.DataFrame) -> str:
             high = _format_metric_value(float(values.max()))
             range_html = (
                 f'<span class="area-map-size-emoji" style="font-size:{style.min_size}px">{style.emoji}</span>'
-                f'<span class="area-map-size-value">{low}</span>'
+                f'<span class="area-map-size-value" style="color:{style.colors[0]}">{low}</span>'
                 '<span class="area-map-size-arrow">→</span>'
                 f'<span class="area-map-size-emoji" style="font-size:{style.max_size}px">{style.emoji}</span>'
-                f'<span class="area-map-size-value">{high}</span>'
+                f'<span class="area-map-size-value" style="color:{style.colors[2]}">{high}</span>'
             )
         items.append(
             '<div class="area-map-size-item">'
             f'<div class="area-map-size-name">{style.emoji} {html.escape(category)}</div>'
             f'<div class="area-map-size-range">{range_html}</div>'
-            f'<div class="area-map-size-unit">{html.escape(style.metric_name)} · {html.escape(style.metric_unit)}</div>'
+            f'<div class="area-map-size-unit">{html.escape(_field_label(style.metric_name))} · '
+            f"{html.escape(style.metric_unit)}</div>"
+            '<div class="area-map-color-row">'
+            f'<span class="area-map-color-bar" style="background:linear-gradient(90deg,'
+            f'{",".join(style.colors)});"></span>'
+            '<span class="area-map-color-label">Text colour: low → high</span></div>'
             "</div>"
         )
     if not items:
         return ""
     return (
         '<div class="area-map-size-legend">'
-        '<div class="area-map-size-title">Marker size <span>main-metric range in the current selection</span></div>'
+        '<div class="area-map-size-title">Marker size &amp; text colour '
+        "<span>main-metric range and text colour scale in the current selection</span></div>"
         f'<div class="area-map-size-grid">{"".join(items)}</div>'
         "</div>"
     )
@@ -420,22 +663,21 @@ def _hover_text(row: object) -> str:
     """Build the HTML hover tooltip for one map point."""
     category = str(getattr(row, "event_category", ""))
     style = _style(category)
-    emoji = style.emoji
-    title = getattr(row, "event_title", None) or category
-    location_parts = [
-        str(value)
-        for value in (getattr(row, "place_location", None), getattr(row, "state_province", None))
-        if isinstance(value, str) and value.strip()
-    ]
-    location = " · ".join(location_parts) or "Unknown location"
-    metric_name = getattr(row, "metric_name", None) or style.metric_name
+    country_code = getattr(row, "country_code", None)
+    state_province = getattr(row, "state_province", None)
+    title = _display_event_title(
+        _string_value(getattr(row, "event_title", None), category),
+        country_code,
+        state_province,
+    )
+    location = _location_text(row)
+    metric_name = _string_value(getattr(row, "metric_name", None), style.metric_name)
     metric_value = getattr(row, "metric_value", None)
-    metric_unit = getattr(row, "metric_unit", None) or ""
+    metric_unit = _string_value(getattr(row, "metric_unit", None), style.metric_unit)
     if pd.notna(metric_value):
-        metric = f"{metric_name} = {float(metric_value):,.3g} {metric_unit}".rstrip()
+        metric = f"{_format_metric_value(float(metric_value))} {_display_value(metric_unit)}".strip()
     else:
-        metric = f"{metric_name} = no value"
-    danger = getattr(row, "danger_rating", None) or "no_rating"
+        metric = "No value"
     start = getattr(row, "event_start_date", None)
     end = getattr(row, "event_end_date", None)
     dates = ""
@@ -445,19 +687,13 @@ def _hover_text(row: object) -> str:
             dates += f" → {pd.Timestamp(end):%Y-%m-%d}"
 
     lines = [
-        f"<b>{html.escape(emoji)} {html.escape(str(title))}</b>",
+        f"<b>{html.escape(style.emoji)} {html.escape(title)}</b>",
         html.escape(location),
-        f"Main metric: {html.escape(metric)}",
-        f"Danger rating: {html.escape(str(danger))}",
+        f"{html.escape(_field_label(metric_name))}: {html.escape(metric)}",
     ]
+    lines.extend(html.escape(line) for line in _other_metrics_lines(getattr(row, "other_metrics", None)))
     if dates:
         lines.append(f"Event: {html.escape(dates)}")
-    other_metrics = getattr(row, "other_metrics", None)
-    if isinstance(other_metrics, str) and other_metrics.strip():
-        other = other_metrics.strip()
-        if len(other) > 180:
-            other = f"{other[:177]}..."
-        lines.append(f"Other: {html.escape(other)}")
     return "<br>".join(lines)
 
 
@@ -498,6 +734,7 @@ def build_map_figure(frame: pd.DataFrame, config: MapConfig) -> go.Figure:
                         textfont={"size": part.loc[valid, "text_size"]},
                         hovertext=part.loc[valid, "hover_text"],
                         hoverinfo="text",
+                        hoverlabel={"font": {"color": part.loc[valid, "hover_color"].tolist()}},
                         opacity=0.9,
                     )
                 )
@@ -512,6 +749,7 @@ def build_map_figure(frame: pd.DataFrame, config: MapConfig) -> go.Figure:
                         textfont={"size": style.min_size},
                         hovertext=part.loc[~valid, "hover_text"],
                         hoverinfo="text",
+                        hoverlabel={"font": {"color": part.loc[~valid, "hover_color"].tolist()}},
                         showlegend=False,
                         opacity=0.35,
                     )
@@ -658,9 +896,9 @@ def render_map(config: MapConfig) -> None:
     st.markdown(_size_legend_html(frame), unsafe_allow_html=True)
     st.caption(
         "Marker size shows each phenomenon's main metric intensity, normalised "
-        "from its observed minimum to maximum in the current selection. This keeps "
-        "different units comparable; emojis identify the phenomenon and hover shows "
-        "the actual value."
+        "from its observed minimum to maximum in the current selection. Emojis keep "
+        "their native colours; tooltip, card and legend text use the phenomenon's "
+        "metric colour scale, and hover shows the actual value."
     )
     if "Earthquake" in selected:
         st.caption(f"Earthquakes below magnitude {min_magnitude:.1f} are hidden by the slider.")

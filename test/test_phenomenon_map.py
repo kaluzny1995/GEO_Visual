@@ -13,6 +13,7 @@ from streamlit.testing.v1 import AppTest
 from dashboard import phenomenon_map
 from dashboard.catalog import MAPS
 from dashboard.map_configs import MAP_CONFIGS, MAP_CONFIGS_BY_KEY, MapConfig
+from dashboard.region_names import country_name, region_name, subdivision_name
 
 START_DATE = dt.date(2026, 11, 1)
 END_DATE = dt.date(2026, 11, 3)
@@ -30,14 +31,21 @@ def raw_map_frame() -> pd.DataFrame:
             "event_title": ["Avalanche zone A", "Avalanche zone B", "Fire A", "Fire B", "Volcano A", "Iceberg A"],
             "latitude": [39.0, 40.0, 34.0, 35.0, 19.42, -72.69],
             "longitude": [-106.0, -111.0, -118.0, -119.0, -155.29, -75.80],
-            "country_code": ["US", "US", "CA", "CA", "US", "AQ"],
+            "country_code": ["US", "US", "US", "US", "US", "AQ"],
             "state_province": ["CO", "UT", "CA", "CA", "HI", None],
             "place_location": ["Zone A", "Zone B", "Forest A", "Forest B", "Kilauea", "Southern Ocean"],
             "danger_rating": ["low", "no_rating", "no_rating", "no_rating", "low", "no_rating"],
             "metric_name": ["size", "size", "area", "area", "vei", "surface"],
             "metric_value": [2.0, None, 10.0, 30.0, 4.0, 30.0],
             "metric_unit": ["destructive size class", None, "km²", "km²", "VEI", "N/m²"],
-            "other_metrics": [None, None, "contained: 50 %", None, "alert: watch", None],
+            "other_metrics": [
+                None,
+                None,
+                "percent_contained: 50 %; threshold_exceeded: false",
+                None,
+                "alert: watch",
+                None,
+            ],
             "event_start_date": pd.to_datetime(
                 ["2026-11-01", "2026-11-01", "2026-11-02", "2026-11-02", "2026-11-03", "2026-11-03"]
             ),
@@ -167,7 +175,12 @@ class TestLoadMapData:
         fire = frame[frame["event_category"] == "Fire"].sort_values("metric_value")
         assert fire["intensity"].tolist() == [0.0, 1.0]
         assert fire["text_size"].tolist() == [9.0, 18.0]
+        assert fire["hover_color"].tolist() == [
+            phenomenon_map.PHENOMENA["Fire"].colors[0],
+            phenomenon_map.PHENOMENA["Fire"].colors[2],
+        ]
         assert pd.isna(frame[frame["metric_value"].isna()]["intensity"]).all()
+        assert frame[frame["metric_value"].isna()]["hover_color"].tolist() == ["#cbd5e1"]
 
     def test_missing_main_metric_uses_the_phenomenon_minimum_size(self) -> None:
         """Unrated avalanche points use avalanche's own minimum emoji size."""
@@ -177,17 +190,164 @@ class TestLoadMapData:
         assert unrated["text_size"].tolist() == [10.0]
 
     def test_builds_emoji_hover_text_with_the_main_metric(self) -> None:
-        """Hover text identifies the phenomenon and its metric."""
+        """Hover text uses full region names and the requested metric format."""
         frame = load_frame()
         hover = frame[frame["event_title"] == "Fire A"]["hover_text"].iloc[0]
 
         assert "🔥 Fire A" in hover
-        assert "area = 10" in hover
-        assert "Danger rating: no_rating" in hover
+        assert "Forest A · United States - California" in hover
+        assert "Area: 10 km²" in hover
+        assert "Percent contained: 50 %" in hover
+        assert "Threshold exceeded: False" in hover
+        assert "Main metric" not in hover
+        assert "Danger" not in hover
+        assert "danger" not in hover
+
+    def test_hover_hides_percentiles_and_danger_metrics(self) -> None:
+        """Secondary metrics are split into lines without percentiles or danger fields."""
+        frame = pd.DataFrame(
+            [
+                {
+                    "event_category": "Flood",
+                    "event_title": "Flood A",
+                    "country_code": "US",
+                    "state_province": "CA",
+                    "place_location": "River A",
+                    "metric_name": "discharge",
+                    "metric_value": 12.5,
+                    "metric_unit": "m³/s",
+                    "other_metrics": (
+                        "depth: 10 (km); nst: 12 (stations); discharge_p95: 2.02 (m³/s); "
+                        "threshold_percentile: 0.95; danger_level: 3; alert_level: advisory; "
+                        "color_code: yellow"
+                    ),
+                    "event_start_date": pd.NaT,
+                    "event_end_date": pd.NaT,
+                }
+            ]
+        )
+        hover = phenomenon_map._hover_text(next(frame.itertuples(index=False)))
+
+        assert "Discharge: 12.5 m³/s" in hover
+        assert "Depth: 10 (km)" in hover
+        assert "Stations: 12 (stations)" in hover
+        assert "Depth: 10 (km)<br>Stations: 12 (stations)" in hover
+        assert "discharge_p95" not in hover
+        assert "percentile" not in hover.lower()
+        assert "danger" not in hover.lower()
+        assert "alert" not in hover.lower()
+        assert "color" not in hover.lower()
+
+    def test_hover_replaces_codes_in_titles_and_places(self) -> None:
+        """Event titles and places replace country/region codes with full names."""
+        frame = pd.DataFrame(
+            [
+                {
+                    "event_category": "Earthquake",
+                    "event_title": "Earthquake - US:",
+                    "country_code": "US",
+                    "state_province": None,
+                    "place_location": "Colorado - USA",
+                    "metric_name": "magnitude",
+                    "metric_value": 4.2,
+                    "metric_unit": "Mw",
+                    "other_metrics": None,
+                    "event_start_date": pd.NaT,
+                    "event_end_date": pd.NaT,
+                }
+            ]
+        )
+        hover = phenomenon_map._hover_text(next(frame.itertuples(index=False)))
+
+        assert "Earthquake - United States" in hover
+        assert "Colorado - United States" in hover
+        assert "US:" not in hover
+        assert "USA" not in hover
+
+    def test_hover_replaces_trailing_place_codes(self) -> None:
+        """A trailing state code in a place label is replaced with its full name."""
+        frame = pd.DataFrame(
+            [
+                {
+                    "event_category": "Earthquake",
+                    "event_title": "Earthquake - United States",
+                    "country_code": "US",
+                    "state_province": "NC",
+                    "place_location": "9 km N of Covelo, CA",
+                    "metric_name": "magnitude",
+                    "metric_value": 2.5,
+                    "metric_unit": "Mw",
+                    "other_metrics": None,
+                    "event_start_date": pd.NaT,
+                    "event_end_date": pd.NaT,
+                }
+            ]
+        )
+        hover = phenomenon_map._hover_text(next(frame.itertuples(index=False)))
+
+        assert "9 km N of Covelo, California · United States" in hover
+        assert "Covelo, CA" not in hover
+
+    def test_hover_falls_back_for_missing_metric_metadata(self) -> None:
+        """A fallback row without metric metadata uses the phenomenon's main metric."""
+        frame = pd.DataFrame(
+            [
+                {
+                    "event_category": "Volcano",
+                    "event_title": "Eruption  Kanlaon",
+                    "country_code": "PH",
+                    "state_province": None,
+                    "place_location": "Philippines",
+                    "metric_name": float("nan"),
+                    "metric_value": float("nan"),
+                    "metric_unit": float("nan"),
+                    "other_metrics": None,
+                    "event_start_date": pd.NaT,
+                    "event_end_date": pd.NaT,
+                }
+            ]
+        )
+        hover = phenomenon_map._hover_text(next(frame.itertuples(index=False)))
+
+        assert "Eruption Kanlaon" in hover
+        assert "VEI: No value" in hover
+        assert "Nan" not in hover
+
+
+class TestRegionNames:
+    """Tests for the full country and region name lookup."""
+
+    def test_maps_codes_to_full_names(self) -> None:
+        """Country and first-level region codes are converted to display names."""
+        assert country_name("US") == "United States"
+        assert country_name("ZZ") == "International waters"
+        assert subdivision_name("US", "CA") == "California"
+        assert subdivision_name("CA", "AB") == "Alberta"
+        assert subdivision_name("RU", "SAK") == "Sakhalin Oblast"
+        assert region_name("US", "CA") == "United States - California"
+        assert region_name("CA", "AB") == "Canada - Alberta"
+        assert region_name("MZ", "Q") == "Mozambique - Zambézia"
+
+    def test_unknown_codes_are_omitted_instead_of_leaking_codes(self) -> None:
+        """Unknown subdivision codes do not leak into the UI."""
+        assert subdivision_name("US", "ZZ") == ""
+        assert region_name("US", "ZZ") == "United States"
+        assert region_name("ZZ", None) == "International waters"
+        assert country_name(None) == ""
 
 
 class TestMapStyles:
     """Tests for per-phenomenon marker sizes and the legend content."""
+
+    def test_text_colours_are_scaled_per_metric(self) -> None:
+        """Text colours interpolate across each metric's own dark-theme scale."""
+        fire = phenomenon_map.PHENOMENA["Fire"]
+
+        assert phenomenon_map._metric_text_color(fire, 0.0) == fire.colors[0]
+        assert phenomenon_map._metric_text_color(fire, 0.5) == fire.colors[1]
+        assert phenomenon_map._metric_text_color(fire, 1.0) == fire.colors[2]
+        assert phenomenon_map._metric_text_color(fire, float("nan")) == "#cbd5e1"
+        assert len({style.colors for style in phenomenon_map.PHENOMENA.values()}) == len(phenomenon_map.PHENOMENA)
 
     def test_marker_size_ranges_are_configured_per_phenomenon(self) -> None:
         """Every phenomenon has its own explicit emoji size range."""
@@ -199,8 +359,9 @@ class TestMapStyles:
         assert ranges["Iceberg"] == (13, 23)
 
     def test_size_legend_uses_emoji_sizes_and_actual_ranges(self) -> None:
-        """The legend shows each phenomenon's values between correctly sized emojis."""
+        """The legend shows values, text colours and correctly sized emojis."""
         legend = phenomenon_map._size_legend_html(load_frame())
+        fire = phenomenon_map.PHENOMENA["Fire"]
 
         assert 'style="font-size:9px">🔥' in legend
         assert 'style="font-size:18px">🔥' in legend
@@ -208,7 +369,12 @@ class TestMapStyles:
         assert 'style="font-size:23px">🧊' in legend
         assert "10" in legend
         assert "30" in legend
-        assert "surface · N/m²" in legend
+        assert f'style="color:{fire.colors[0]}"' in legend
+        assert f'style="color:{fire.colors[2]}"' in legend
+        assert "linear-gradient(90deg,#fef9c3,#fb923c,#ef4444)" in legend
+        assert "Area · km²" in legend
+        assert "Surface · N/m²" in legend
+        assert "Text colour: low → high" in legend
         assert "●" not in legend
 
     def test_summary_cards_use_the_configured_region_field(self) -> None:
@@ -222,8 +388,11 @@ class TestMapStyles:
         assert "Mean area" in us_cards
         assert "20 km²" in us_cards
         assert "Top state" in us_cards
-        assert "CA · 2" in us_cards
+        assert "United States - California · 2" in us_cards
+        assert "CA · 2" not in us_cards
+        assert f'style="color:{phenomenon_map.PHENOMENA["Fire"].colors[1]}"' in us_cards
         assert "Top country" in africa_cards
+        assert "United States · 2" in africa_cards
         assert "Top area" in waters_cards
         assert "Southern Ocean · 1" in waters_cards
 
@@ -251,6 +420,11 @@ class TestBuildMapFigure:
         assert figure.data[0].textfont.size[0] == 15.0
         assert figure.layout.title.text is None
         assert figure.layout.geo.scope == "usa"
+        fire = next(trace for trace in figure.data if trace.name == "🔥 Fire")
+        assert tuple(fire.hoverlabel.font.color) == (
+            phenomenon_map.PHENOMENA["Fire"].colors[0],
+            phenomenon_map.PHENOMENA["Fire"].colors[2],
+        )
         shapes = list(figure.layout.shapes)
         assert len(shapes) == 1
         assert shapes[0].type == "rect"
