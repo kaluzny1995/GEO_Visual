@@ -13,11 +13,11 @@ from provider.supabase_postgres.supabase_postgres_provider import SupabasePostgr
 
 logger = logging.getLogger(__name__)
 
-# How long the welcome page reuses a connection check before probing again.
-STATUS_TTL_SECONDS = 60
-
 # Loaded once per process; a config change requires a Streamlit restart.
-_DB_CONFIG = AppConfig.from_json().database
+DB_CONFIG = AppConfig.from_json().database
+
+# How long the welcome page reuses a connection check before probing again.
+STATUS_TTL_SECONDS = DB_CONFIG.connection_status_ttl_seconds
 
 
 @dataclass(frozen=True)
@@ -44,12 +44,12 @@ def get_provider() -> SupabasePostgresProvider:
         The shared :class:`SupabasePostgresProvider`.
     """
     return SupabasePostgresProvider(
-        connect_timeout=_DB_CONFIG.connect_timeout,
-        pool_size=_DB_CONFIG.pool_size,
-        max_overflow=_DB_CONFIG.max_overflow,
-        pool_recycle=_DB_CONFIG.pool_recycle_seconds,
-        max_rows=_DB_CONFIG.max_rows,
-        statement_timeout_ms=_DB_CONFIG.statement_timeout_ms,
+        connect_timeout=DB_CONFIG.connect_timeout,
+        pool_size=DB_CONFIG.pool_size,
+        max_overflow=DB_CONFIG.max_overflow,
+        pool_recycle=DB_CONFIG.pool_recycle_seconds,
+        max_rows=DB_CONFIG.max_rows,
+        statement_timeout_ms=DB_CONFIG.statement_timeout_ms,
     )
 
 
@@ -95,8 +95,8 @@ def cached_connection_status() -> ConnectionStatus:
 
 
 @st.cache_data(
-    ttl=_DB_CONFIG.cache_ttl_seconds,
-    max_entries=_DB_CONFIG.cache_max_entries,
+    ttl=DB_CONFIG.cache_ttl_seconds,
+    max_entries=DB_CONFIG.cache_max_entries,
     show_spinner="Loading data from Supabase...",
 )
 def cached_query(

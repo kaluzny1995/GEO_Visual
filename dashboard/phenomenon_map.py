@@ -20,13 +20,13 @@ from dashboard.region_names import (
     region_name,
     subdivision_name,
 )
-from utils.database import cached_query
+from utils.database import DB_CONFIG, cached_query
 from utils.sql import load_sql
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MIN_MAGNITUDE: Final = 2.5
-MAP_MAX_ROWS: Final = 50_000
+DEFAULT_MIN_MAGNITUDE: Final = DB_CONFIG.map_default_min_magnitude
+MAP_MAX_ROWS: Final = DB_CONFIG.map_max_rows
 MAP_QUERY_TEMPLATE = load_sql("phenomenons_map")
 MAP_DATE_BOUNDS_QUERY_TEMPLATE = load_sql("phenomenons_map_date_bounds")
 

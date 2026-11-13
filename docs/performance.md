@@ -48,11 +48,12 @@ enforces these limits on every dataframe query:
 | Guardrail | Default | Where |
 |-----------|---------|-------|
 | Row cap per query | `50 000` | `database.max_rows` in `config.json` |
-| Distribution query cap | `250 000` | `DISTRIBUTION_MAX_ROWS` in `dashboard/metrics_timeline.py` |
-| Area map POI cap | `50 000` | `MAP_MAX_ROWS` in `dashboard/phenomenon_map.py` |
+| Distribution query cap | `250 000` | `database.distribution_max_rows` in `config.json` |
+| Area map POI cap | `50 000` | `database.map_max_rows` in `config.json` |
 | PostgreSQL statement timeout | `30 000 ms` | `database.statement_timeout_ms` |
 | Result cache TTL | `300 s` | `database.cache_ttl_seconds` |
 | Result cache entries | `32` | `database.cache_max_entries` |
+| Connection-status cache TTL | `60 s` | `database.connection_status_ttl_seconds` |
 | Pool size / overflow | `5` / `5` | `database.pool_size` / `max_overflow` |
 | Pool recycle | `300 s` | `database.pool_recycle_seconds` |
 

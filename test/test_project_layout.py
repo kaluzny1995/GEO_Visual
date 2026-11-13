@@ -53,8 +53,8 @@ def test_tox_defines_the_quality_environments(env: str) -> None:
     ],
 )
 def test_readme_documents_streamlit_supabase_and_dashboards(expected: str) -> None:
-    """The README explains how to run the app, configure Supabase and find the dashboards."""
-    text = (ROOT / "README.md").read_text(encoding="utf-8")
+    """The README/setup docs explain how to run the app, configure Supabase and find dashboards."""
+    text = (ROOT / "README.md").read_text(encoding="utf-8") + (ROOT / "docs" / "setup.md").read_text(encoding="utf-8")
     assert expected in text
 
 

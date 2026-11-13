@@ -44,6 +44,10 @@ class DatabaseSection(BaseModel):
         statement_timeout_ms: Per-query PostgreSQL statement timeout.
         cache_ttl_seconds: How long Streamlit caches query results.
         cache_max_entries: Maximum number of cached query results.
+        connection_status_ttl_seconds: Sidebar connection-status cache lifetime.
+        distribution_max_rows: Row cap for the timeline histogram query.
+        map_max_rows: Row cap for an area-map POI query.
+        map_default_min_magnitude: Initial earthquake magnitude filter on maps.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -57,6 +61,10 @@ class DatabaseSection(BaseModel):
     statement_timeout_ms: int = 30_000
     cache_ttl_seconds: int = 300
     cache_max_entries: int = 32
+    connection_status_ttl_seconds: int = 60
+    distribution_max_rows: int = 250_000
+    map_max_rows: int = 50_000
+    map_default_min_magnitude: float = 2.5
 
 
 class AppConfig(BaseModel):

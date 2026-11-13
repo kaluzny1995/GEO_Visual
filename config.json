@@ -2,7 +2,7 @@
   "app": {
     "title": "GEO Visual",
     "subtitle": "Interactive dashboards for the GEO geographic-data pipeline",
-    "page_icon": "🌍",
+    "page_icon": "\ud83c\udf0d",
     "layout": "wide",
     "version": "0.1.0"
   },
@@ -15,6 +15,10 @@
     "max_rows": 50000,
     "statement_timeout_ms": 30000,
     "cache_ttl_seconds": 300,
-    "cache_max_entries": 32
+    "cache_max_entries": 32,
+    "connection_status_ttl_seconds": 60,
+    "distribution_max_rows": 250000,
+    "map_max_rows": 50000,
+    "map_default_min_magnitude": 2.5
   }
 }

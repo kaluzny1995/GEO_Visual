@@ -58,7 +58,9 @@ sparse metrics such as volcano casualties, damage or iceberg geometry counts.
 ## Predictions
 
 Every metrics view also carries PySpark MLlib predictions (`is_predicted = TRUE`)
-for dates where a metric has no observation. The dashboard draws predicted
+for dates where a metric has no observation. This includes Volcano Number
+(`vnum` / Smithsonian GVP), whose missing snapshots are now estimated like any
+other numeric metric. The dashboard draws predicted
 points as pink diamonds connected by dashed segments, keeps the observed series
 in the metric colour, and overlays predicted values as a second histogram
 series. A **Show predicted values** checkbox above the charts hides or shows

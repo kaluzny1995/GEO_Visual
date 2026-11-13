@@ -34,6 +34,10 @@ DEFAULT_DATABASE = {
     "statement_timeout_ms": 30_000,
     "cache_ttl_seconds": 300,
     "cache_max_entries": 32,
+    "connection_status_ttl_seconds": 60,
+    "distribution_max_rows": 250_000,
+    "map_max_rows": 50_000,
+    "map_default_min_magnitude": 2.5,
 }
 
 CUSTOM_DATABASE = {
@@ -46,6 +50,10 @@ CUSTOM_DATABASE = {
     "statement_timeout_ms": 5_000,
     "cache_ttl_seconds": 60,
     "cache_max_entries": 8,
+    "connection_status_ttl_seconds": 15,
+    "distribution_max_rows": 10_000,
+    "map_max_rows": 5_000,
+    "map_default_min_magnitude": 4.0,
 }
 
 DATABASE_CASES = [

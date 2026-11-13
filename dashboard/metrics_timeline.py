@@ -25,13 +25,13 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import error
-from utils.database import cached_query
+from utils.database import DB_CONFIG, cached_query
 from utils.sql import load_sql
 
 logger = logging.getLogger(__name__)
 
 DISTRIBUTION_QUERY_TEMPLATE = load_sql("metrics_distribution")
-DISTRIBUTION_MAX_ROWS: Final = 250_000
+DISTRIBUTION_MAX_ROWS: Final = DB_CONFIG.distribution_max_rows
 
 
 @dataclass(frozen=True)
