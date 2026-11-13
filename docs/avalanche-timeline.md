@@ -13,8 +13,9 @@ the source tree.
 
 ## Data source
 
-`geo.metrics_avalanche_vw` is written by GEO_ETL from the avalanche rows of
-`geo.union_etl`. It unpivots each row into one metric observation:
+`geo.metrics_avalanche_vw` is built by GEO_ETL from the observed avalanche rows of
+`geo.union_etl` plus the MLlib predictions for missing dates in
+`geo.prediction_etl`. It unpivots each row into one metric observation:
 
 | Column              | Meaning                                              |
 |---------------------|------------------------------------------------------|
@@ -24,6 +25,7 @@ the source tree.
 | `metric_value`      | Numeric observation                                  |
 | `metric_unit`       | Unit paired with the metric (`NAPADS level`, `destructive size class`) |
 | `file_date`         | Daily snapshot date                                 |
+| `is_predicted`      | `FALSE` for observed rows, `TRUE` for MLlib estimates |
 
 Each `file_date` is one forecast snapshot. The view contains many rows per
 snapshot (one per zone and metric), so the dashboard aggregates before
@@ -68,6 +70,20 @@ the selected Statistic. All dashboards share the parameterized
 `sql/metrics_distribution.sql` query; the dashboard configuration supplies the
 view name.
 
+## Predictions
+
+The view also contains PySpark MLlib predictions (`is_predicted = TRUE`) for
+dates where the metric has no observation. The dashboard draws them as pink
+diamond markers joined by dashed segments, keeps the observed series in the
+metric colour, and overlays predicted values as a second histogram series. A
+**Show predicted values** checkbox above the charts hides or shows them.
+
+Predicted dates never inflate the **Observations** KPI; a separate **Predicted
+dates** KPI reports how many dates are model estimates. While predictions are
+shown, shaded gaps only mark dates missing from both series; hiding predictions
+restores the observed-only gap shading. Predicted rows are excluded from the
+**Aggregated data** series label (`series = Predicted` / `Observed`).
+
 ## Query
 
 The dashboard runs three guarded queries through
@@ -90,6 +106,7 @@ FROM geo.metrics_avalanche_vw;
 SELECT file_date::date AS file_date,
        metric_name,
        metric_unit,
+       is_predicted,
        count(*) AS observation_count,
        avg(metric_value) AS mean_value,
        percentile_cont(0.5) WITHIN GROUP (ORDER BY metric_value) AS median_value,
@@ -100,7 +117,7 @@ FROM geo.metrics_avalanche_vw
 WHERE event_category = 'avalanche'
   AND file_date >= CAST(:start_date AS date)
   AND file_date < CAST(:end_date AS date) + INTERVAL '1 day'
-GROUP BY file_date, metric_name, metric_unit
+GROUP BY file_date, metric_name, metric_unit, is_predicted
 ORDER BY file_date, metric_name, metric_unit;
 ```
 
@@ -123,8 +140,8 @@ GEO_ETL's base or `_etl` tables.
   observations are shaded, with their ranges listed in a compact caption below
   the chart. Avalanche `size`, for example, is shaded before its first value
   instead of showing an unexplained empty lead-in.
-- **KPIs** — snapshots, metrics, observations and the latest snapshot in the
-  selected range.
+- **KPIs** — snapshots, metrics, observations, predicted dates and the latest
+  snapshot in the selected range.
 - **Aggregated data** — an expander shows the query result and offers a CSV
   download.
 - **Empty and error states** — a missing view, unconfigured Supabase or an

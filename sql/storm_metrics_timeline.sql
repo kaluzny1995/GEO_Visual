@@ -5,6 +5,7 @@
 SELECT file_date::date AS file_date,
        metric_name,
        metric_unit,
+       is_predicted,
        count(*) AS observation_count,
        avg(metric_value) AS mean_value,
        percentile_cont(0.5) WITHIN GROUP (ORDER BY metric_value) AS median_value,
@@ -15,5 +16,5 @@ FROM geo.metrics_storm_vw
 WHERE event_category = 'storm'
   AND file_date >= CAST(:start_date AS date)
   AND file_date < CAST(:end_date AS date) + INTERVAL '1 day'
-GROUP BY file_date, metric_name, metric_unit
-ORDER BY file_date, metric_name, metric_unit;
+GROUP BY file_date, metric_name, metric_unit, is_predicted
+ORDER BY file_date, metric_name, metric_unit, is_predicted;

@@ -25,9 +25,10 @@ or from the **Metric timelines and distributions** sidebar menu.
 
 ## Data shape
 
-Each view is written by GEO_ETL from the matching `event_category` rows of
-`geo.union_etl` and unpivots them into one row per
-`(file_date, metric_name, metric_value, metric_unit)`. `file_date` is the daily
+Each view is built by GEO_ETL from the matching observed `event_category` rows of
+`geo.union_etl`, unpivots them into one row per
+`(file_date, metric_name, metric_value, metric_unit)`, and then appends MLlib
+predictions for missing dates from `geo.prediction_etl`. `file_date` is the daily
 snapshot stamp.
 
 Each visible distinct `(metric_name, metric_unit)` pair gets its own timeline
@@ -53,6 +54,20 @@ translucent observed min-max band across the events in each snapshot.
 Every chart spans the selected date range. Periods where a metric has no
 observations are shaded, with their ranges listed below the chart; the grey field reaches the nearest observed snapshot on each side. This is expected for
 sparse metrics such as volcano casualties, damage or iceberg geometry counts.
+
+## Predictions
+
+Every metrics view also carries PySpark MLlib predictions (`is_predicted = TRUE`)
+for dates where a metric has no observation. The dashboard draws predicted
+points as pink diamonds connected by dashed segments, keeps the observed series
+in the metric colour, and overlays predicted values as a second histogram
+series. A **Show predicted values** checkbox above the charts hides or shows
+them.
+
+Predictions are never counted in the **Observations** KPI; the separate
+**Predicted dates** KPI reports their count. With predictions shown, shaded gaps
+only cover dates missing from both series. Prediction rows appear in the
+**Aggregated data** table with `series = Predicted`.
 
 ## Distribution
 
@@ -89,8 +104,8 @@ Every page has the same controls and layout:
 - **Snapshot range** — defaults to the full range in the view; inclusive.
 - **One timeline and histogram per metric and unit** — metrics are discovered
   from the rows; each gets a timeline and a value distribution histogram.
-- **Missing observations** — shaded on the full selected timeline, with the grey field reaching the nearest observed snapshot on each side and the missing ranges listed below each chart.
-- **KPIs** — snapshots, metric series, observations and the latest snapshot.
+- **Missing observations** — shaded on the full selected timeline, with the grey field reaching the nearest observed snapshot on each side and the missing ranges listed below each chart. Dates covered by a prediction are only shaded when predictions are hidden.
+- **KPIs** — snapshots, metric series, observations, predicted dates and the latest snapshot.
 - **Aggregated data** — preview and CSV download.
 - **Empty and error states** — short messages instead of stack traces.
 

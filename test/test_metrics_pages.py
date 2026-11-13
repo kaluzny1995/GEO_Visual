@@ -45,6 +45,7 @@ def sample_frame(metrics: tuple[tuple[str, str | None], ...]) -> pd.DataFrame:
                     "file_date": file_date,
                     "metric_name": metric_name,
                     "metric_unit": metric_unit,
+                    "is_predicted": False,
                     "observation_count": 10,
                     "mean_value": 1.5,
                     "median_value": 1.5,
@@ -63,7 +64,14 @@ def sample_distribution(frame: pd.DataFrame) -> pd.DataFrame:
     rows = []
     for metric_name, metric_unit in frame[["metric_name", "metric_unit"]].drop_duplicates().itertuples(index=False):
         for value in (1.0, 2.0, 3.0):
-            rows.append({"metric_name": metric_name, "metric_unit": metric_unit, "metric_value": value})
+            rows.append(
+                {
+                    "metric_name": metric_name,
+                    "metric_unit": metric_unit,
+                    "is_predicted": False,
+                    "metric_value": value,
+                }
+            )
     return pd.DataFrame(rows)
 
 
@@ -179,9 +187,11 @@ def test_page_renders_title_charts_and_filters(
     assert "Snapshots" in metric_labels
     assert "Metrics" in metric_labels
     assert "Observations" in metric_labels
+    assert "Predicted dates" in metric_labels
     assert "Latest snapshot" in metric_labels
     metrics_by_label = {metric.label: metric.value for metric in at.metric}
     assert metrics_by_label["Metrics"] == str(expected_metrics)
+    assert [checkbox.label for checkbox in at.main.checkbox] == ["Show predicted values"]
     assert list(at.main.selectbox[0].options) == [
         "Mean",
         "Median",
@@ -192,7 +202,7 @@ def test_page_renders_title_charts_and_filters(
     assert any("Mean of all recorded values" in caption.value for caption in at.caption)
     assert any("timelines span the selected dates" in caption.value for caption in at.caption)
     assert any("histograms show all values in the range" in caption.value for caption in at.caption)
-    assert any("shaded areas mark missing observations" in caption.value for caption in at.caption)
+    assert any("shaded areas mark dates without observations or predictions" in caption.value for caption in at.caption)
     assert any(config.view_name in caption.value for caption in at.caption)
     if config.note:
         assert any(config.note in caption.value for caption in at.caption)
@@ -280,3 +290,41 @@ def test_query_error_shows_a_friendly_message(
     expected_message = f"Could not load the {config.description} view"
     assert not at.exception
     assert any(expected_message in error.value for error in at.main.error)
+
+
+def predicted_page_frames() -> tuple[pd.DataFrame, pd.DataFrame]:
+    """One observed drought snapshot and one predicted snapshot for the toggle test."""
+    observed = sample_frame((("area", "km²"),)).iloc[[0]].copy()
+    predicted = observed.assign(
+        file_date=pd.Timestamp("2026-11-02"),
+        is_predicted=True,
+        observation_count=1,
+        mean_value=2.5,
+        median_value=2.5,
+        max_value=2.5,
+        min_value=2.5,
+        sum_value=2.5,
+    )
+    frame = pd.concat([observed, predicted], ignore_index=True)
+    distribution = pd.DataFrame(
+        {
+            "metric_name": ["area", "area", "area"],
+            "metric_unit": ["km²", "km²", "km²"],
+            "is_predicted": [False, False, True],
+            "metric_value": [1.0, 2.0, 2.5],
+        }
+    )
+    return frame, distribution
+
+
+def test_page_shows_predicted_values_and_toggle() -> None:
+    """A dashboard with predictions shows the predicted KPI, caption and checkbox."""
+    frame, distribution = predicted_page_frames()
+    at = run_page(drought_timeline.DASHBOARD, frame=frame, distribution=distribution)
+
+    assert not at.exception
+    metrics_by_label = {metric.label: metric.value for metric in at.metric}
+    assert metrics_by_label["Predicted dates"] == "1"
+    assert [checkbox.label for checkbox in at.main.checkbox] == ["Show predicted values"]
+    assert at.main.checkbox[0].value is True
+    assert any("Predicted values are PySpark MLlib estimates" in caption.value for caption in at.caption)

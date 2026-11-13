@@ -12,8 +12,9 @@ tree.
 
 ## Data source
 
-`geo.metrics_drought_vw` is written by GEO_ETL from the drought rows of
-`geo.union_etl`. It unpivots each row into one metric observation:
+`geo.metrics_drought_vw` is built by GEO_ETL from the observed drought rows of
+`geo.union_etl` plus the MLlib predictions for missing dates in
+`geo.prediction_etl`. It unpivots each row into one metric observation:
 
 | Column              | Meaning                                              |
 |---------------------|------------------------------------------------------|
@@ -29,7 +30,7 @@ for additional numeric drought metrics if another source starts sending them;
 a new metric appears automatically as a new chart.
 
 Each `file_date` is one snapshot. The dashboard aggregates in PostgreSQL and
-sends only one row per `(file_date, metric_name, metric_unit)` to Streamlit.
+sends only one row per `(file_date, metric_name, metric_unit, is_predicted)` to Streamlit.
 
 ## Aggregation
 
@@ -60,6 +61,20 @@ the selected Statistic. All dashboards share the parameterized
 `sql/metrics_distribution.sql` query; the dashboard configuration supplies the
 view name.
 
+## Predictions
+
+The view also contains PySpark MLlib predictions (`is_predicted = TRUE`) for
+dates where the metric has no observation. The dashboard draws them as pink
+diamond markers joined by dashed segments, keeps the observed series in the
+metric colour, and overlays predicted values as a second histogram series. A
+**Show predicted values** checkbox above the charts hides or shows them.
+
+Predicted dates never inflate the **Observations** KPI; a separate **Predicted
+dates** KPI reports how many dates are model estimates. While predictions are
+shown, shaded gaps only mark dates missing from both series; hiding predictions
+restores the observed-only gap shading. Predicted rows are excluded from the
+**Aggregated data** series label (`series = Predicted` / `Observed`).
+
 ## Query
 
 The dashboard runs three guarded queries through
@@ -82,6 +97,7 @@ FROM geo.metrics_drought_vw;
 SELECT file_date::date AS file_date,
        metric_name,
        metric_unit,
+       is_predicted,
        count(*) AS observation_count,
        avg(metric_value) AS mean_value,
        percentile_cont(0.5) WITHIN GROUP (ORDER BY metric_value) AS median_value,
@@ -92,7 +108,7 @@ FROM geo.metrics_drought_vw
 WHERE event_category = 'drought'
   AND file_date >= CAST(:start_date AS date)
   AND file_date < CAST(:end_date AS date) + INTERVAL '1 day'
-GROUP BY file_date, metric_name, metric_unit
+GROUP BY file_date, metric_name, metric_unit, is_predicted
 ORDER BY file_date, metric_name, metric_unit;
 ```
 
@@ -110,8 +126,8 @@ GEO_ETL's base or `_etl` tables.
   change, with its own timeline and value distribution histogram.
 - **All recorded values** — every chart spans the selected date range; periods
   where a metric has no observations are shaded, with their ranges listed below the chart; the grey field reaches the nearest observed snapshot on each side.
-- **KPIs** — snapshots, metrics, observations and the latest snapshot in the
-  selected range.
+- **KPIs** — snapshots, metrics, observations, predicted dates and the latest
+  snapshot in the selected range.
 - **Aggregated data** — an expander shows the query result and offers a CSV
   download.
 - **Empty and error states** — a missing view, unconfigured Supabase or an

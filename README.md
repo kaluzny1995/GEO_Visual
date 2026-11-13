@@ -74,7 +74,12 @@ trade-offs and the guardrails that keep large result sets out of the Streamlit p
   `dashboard/region_names.py` converts ISO codes to full country/region names
 - **Value distribution histograms** — each timeline is paired with a 20-bin
   histogram of every raw value for the visible metric series in the selected date range, computed from
-  the shared `sql/metrics_distribution.sql` query
+  the shared `sql/metrics_distribution.sql` query; MLlib-predicted values are
+  overlaid as a separate pink series
+- **Predicted gaps** — GEO_ETL's `geo.prediction_etl` fills dates with no
+  observation using PySpark MLlib; the timelines draw those points as pink
+  diamonds with dashed segments and a **Show predicted values** checkbox, while
+  the **Observations** KPI stays observed-only
 - **Shared timeline engine** — `dashboard/metrics_timeline.py` renders all eight
   timeline/distribution dashboards; per-view configurations and SQL scripts keep
   the page code small
@@ -100,7 +105,8 @@ trade-offs and the guardrails that keep large result sets out of the Streamlit p
   port 8501, with Supabase credentials injected at runtime
 - **Dev tooling** — ruff (lint + format), mypy, pytest and tox
 - **Tests without a database** — mocked engine, chart/map builders and Streamlit's
-  `AppTest` cover the welcome page, all timelines/distributions and all nine area maps
+  `AppTest` cover the welcome page, all timelines/distributions (including the
+  predicted series and toggle) and all nine area maps
 
 ## Dashboards
 

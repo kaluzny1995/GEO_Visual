@@ -66,6 +66,8 @@ class DashboardConfig:
 
 
 PALETTE: Final = ("#2dd4bf", "#fbbf24", "#60a5fa", "#fb7185", "#a78bfa", "#38bdf8")
+PREDICTED_COLOR: Final = "#f472b6"
+"""High-contrast pink used only for ML-predicted values and line segments."""
 
 #: Display names for abbreviations that should not be title-cased.
 METRIC_NAME_OVERRIDES: Final[dict[str, str]] = {
@@ -147,7 +149,8 @@ def load_metric_timeline(config: DashboardConfig, start_date: dt.date, end_date:
     frame = frame.copy()
     frame["file_date"] = pd.to_datetime(frame["file_date"])
     frame["observation_count"] = frame["observation_count"].astype("int64")
-    frame = frame.sort_values(["file_date", "metric_name"], ignore_index=True)
+    frame["is_predicted"] = frame["is_predicted"].fillna(False).astype(bool)
+    frame = frame.sort_values(["file_date", "metric_name", "is_predicted"], ignore_index=True)
     return _drop_hidden_metrics(config, frame)
 
 
@@ -195,6 +198,7 @@ def load_metric_distribution(config: DashboardConfig, start_date: dt.date, end_d
         return frame
     frame = frame.copy()
     frame["metric_value"] = pd.to_numeric(frame["metric_value"], errors="coerce")
+    frame["is_predicted"] = frame["is_predicted"].fillna(False).astype(bool)
     frame = frame.dropna(subset=["metric_value"]).reset_index(drop=True)
     return _drop_hidden_metrics(config, frame)
 
@@ -292,33 +296,89 @@ def format_missing_runs(runs: list[tuple[pd.Timestamp, pd.Timestamp]]) -> str | 
     return f"No observations: {'; '.join(periods)}."
 
 
-def _missing_vrect_bounds(
-    plot_frame: pd.DataFrame,
+def missing_value_runs(
+    series: pd.DataFrame,
+    date_index: pd.DatetimeIndex,
+    *,
+    include_predicted: bool,
+) -> list[tuple[pd.Timestamp, pd.Timestamp]]:
+    """Return date runs with neither an observed nor a shown predicted value.
+
+    Args:
+        series: Rows of a single metric, including ``is_predicted``.
+        date_index: Full timeline shared by all charts.
+        include_predicted: Whether predicted dates count as covered.
+
+    Returns:
+        One ``(start, end)`` pair per contiguous uncovered run.
+    """
+    if series.empty:
+        return _missing_date_runs(pd.Series(True, index=date_index))
+    covered_dates = set(series.loc[~series["is_predicted"], "file_date"])
+    if include_predicted:
+        covered_dates |= set(series.loc[series["is_predicted"], "file_date"])
+    covered = pd.Series([timestamp in covered_dates for timestamp in date_index], index=date_index)
+    return _missing_date_runs(~covered)
+
+
+def _presence_vrect_bounds(
+    covered: pd.Series,
     start: pd.Timestamp,
     end: pd.Timestamp,
 ) -> tuple[pd.Timestamp, pd.Timestamp]:
-    """Return shading bounds from the nearest observed snapshots.
-
-    Args:
-        plot_frame: Daily frame with the metric's observation counts.
-        start: First missing snapshot date.
-        end: Last missing snapshot date.
-
-    Returns:
-        Left and right x-coordinates for the no-data shading. The shading
-        touches the nearest observed marker on each side, or the axis edge
-        when there is no observed snapshot on that side.
-    """
-    axis_start = plot_frame.index.min() - pd.Timedelta(hours=12)
-    axis_end = plot_frame.index.max() + pd.Timedelta(hours=12)
-    observed = plot_frame.index[plot_frame["observation_count"].notna()]
-    if observed.empty:
+    """Return shading bounds around an uncovered run using the nearest covered dates."""
+    axis_start = covered.index.min() - pd.Timedelta(hours=12)
+    axis_end = covered.index.max() + pd.Timedelta(hours=12)
+    present = covered.index[covered]
+    if present.empty:
         return axis_start, axis_end
-    before = observed[observed < start]
-    after = observed[observed > end]
+    before = present[present < start]
+    after = present[present > end]
     left = before[-1] if len(before) else axis_start
     right = after[0] if len(after) else axis_end
     return pd.Timestamp(left), pd.Timestamp(right)
+
+
+def _prediction_segments(
+    observed_values: pd.Series,
+    predicted_values: pd.Series,
+) -> list[tuple[pd.DatetimeIndex, pd.Series]]:
+    """Build dashed line segments for predicted runs, anchored to nearest observations.
+
+    Args:
+        observed_values: Observed values indexed by snapshot date.
+        predicted_values: Predicted values indexed by snapshot date.
+
+    Returns:
+        One ``(dates, values)`` pair per contiguous predicted run. The dates
+        include the nearest observed neighbour on either side when present, so
+        the dashed prediction line visibly joins the observed line.
+    """
+    combined = observed_values.combine_first(predicted_values)
+    predicted = predicted_values.notna()
+    segments: list[tuple[pd.DatetimeIndex, pd.Series]] = []
+    start: int | None = None
+    for position, is_predicted in enumerate(predicted.to_numpy()):
+        if is_predicted and start is None:
+            start = position
+        elif not is_predicted and start is not None:
+            end = position - 1
+            left = start - 1 if start > 0 and pd.notna(combined.iloc[start - 1]) else start
+            right = end + 1 if end + 1 < len(combined) and pd.notna(combined.iloc[end + 1]) else end
+            dates = combined.index[left : right + 1]
+            values = combined.loc[dates].dropna()
+            if not values.empty:
+                segments.append((pd.DatetimeIndex(values.index), values))
+            start = None
+    if start is not None:
+        end = len(combined) - 1
+        left = start - 1 if start > 0 and pd.notna(combined.iloc[start - 1]) else start
+        right = end + 1 if end + 1 < len(combined) and pd.notna(combined.iloc[end + 1]) else end
+        dates = combined.index[left : right + 1]
+        values = combined.loc[dates].dropna()
+        if not values.empty:
+            segments.append((pd.DatetimeIndex(values.index), values))
+    return segments
 
 
 def build_metric_figure(
@@ -329,6 +389,7 @@ def build_metric_figure(
     aggregation: Aggregation,
     color: str,
     date_index: pd.DatetimeIndex | None = None,
+    show_predictions: bool = True,
 ) -> go.Figure:
     """Build the timeline chart for one metric.
 
@@ -340,31 +401,52 @@ def build_metric_figure(
         color: Line colour used by the metric.
         date_index: Full timeline shared by all charts. When omitted, the
             metric's own first-to-last snapshot range is used.
+        show_predictions: Whether ML-predicted values should be drawn. Predicted
+            values are never used for the Observations statistic.
 
     Returns:
-        A Plotly line chart with one marker per snapshot date. Periods where
-        the metric has no observations are shaded; the caller lists their
-        ranges below the chart.
+        A Plotly line chart with observed and (optionally) predicted series.
+        Periods with neither value are shaded; the caller lists their ranges.
     """
-    plot_frame = series.sort_values("file_date").set_index("file_date")
-    if date_index is None and not plot_frame.empty:
-        date_index = pd.date_range(plot_frame.index.min(), plot_frame.index.max(), freq="D")
-    if date_index is not None:
-        plot_frame = plot_frame.reindex(date_index)
+    series = series.sort_values(["file_date", "is_predicted"])
+    observed = series[~series["is_predicted"]]
+    include_predictions = show_predictions and aggregation.key != "count"
+    predicted = series[series["is_predicted"]] if include_predictions else series.iloc[0:0]
 
-    values = plot_frame[aggregation.column]
-    has_data = bool(plot_frame["observation_count"].notna().any())
-    show_band = aggregation.key == "mean" and has_data
+    if date_index is None:
+        dates = pd.concat([observed["file_date"], predicted["file_date"]]).dropna().unique()
+        if len(dates):
+            date_index = pd.date_range(pd.Timestamp(dates.min()), pd.Timestamp(dates.max()), freq="D")
+
+    observed_plot = (
+        observed.set_index("file_date").reindex(date_index)
+        if date_index is not None
+        else observed.set_index("file_date")
+    )
+    predicted_plot = (
+        predicted.set_index("file_date").reindex(date_index)
+        if date_index is not None
+        else predicted.set_index("file_date")
+    )
+    values = observed_plot[aggregation.column]
+    predicted_values = predicted_plot[aggregation.column]
+    has_observed = bool(observed_plot["observation_count"].notna().any()) if not observed_plot.empty else False
+    has_predicted = bool(predicted_values.notna().any())
+    show_band = aggregation.key == "mean" and has_observed
+    show_legend = show_band or has_predicted
     unit_suffix = f" {metric_unit}" if metric_unit and aggregation.key != "count" else ""
+    covered = observed_plot["observation_count"].notna() | (
+        predicted_plot["observation_count"].notna() if not predicted_plot.empty else False
+    )
 
     figure = go.Figure()
     if show_band:
         # Draw one closed polygon per contiguous data segment. A two-trace
         # fill would create triangular artifacts across gaps in sparse series.
-        valid = plot_frame["max_value"].notna() & plot_frame["min_value"].notna()
+        valid = observed_plot["max_value"].notna() & observed_plot["min_value"].notna()
         if valid.any():
             groups = valid.ne(valid.shift(fill_value=False)).cumsum()
-            for index, (_, segment) in enumerate(plot_frame[valid].groupby(groups[valid])):
+            for index, (_, segment) in enumerate(observed_plot[valid].groupby(groups[valid])):
                 x_values = list(segment.index) + list(segment.index[::-1])
                 y_values = list(segment["max_value"]) + list(segment["min_value"][::-1])
                 figure.add_trace(
@@ -381,36 +463,68 @@ def build_metric_figure(
                     )
                 )
 
-    if has_data:
+    if has_observed:
         figure.add_trace(
             go.Scatter(
-                x=plot_frame.index,
+                x=observed_plot.index,
                 y=values,
                 mode="lines+markers",
-                name=aggregation.label,
+                name="Observed",
                 line={"color": color, "width": 2.5},
                 marker={"color": color, "size": 7, "line": {"color": "#0f172a", "width": 1}},
                 connectgaps=False,
-                showlegend=show_band,
+                showlegend=show_legend,
                 hovertemplate=(
-                    f"%{{x|%Y-%m-%d}}<br>{aggregation.label}: "
+                    f"Observed<br>%{{x|%Y-%m-%d}}<br>{aggregation.label}: "
                     f"%{{y:{aggregation.value_format}}}{unit_suffix}<extra></extra>"
                 ),
             )
         )
 
-    missing = plot_frame["observation_count"].isna()
-    for start, end in _missing_date_runs(missing):
-        x0, x1 = _missing_vrect_bounds(plot_frame, start, end)
-        figure.add_vrect(
-            x0=x0,
-            x1=x1,
-            fillcolor="rgba(148, 163, 184, 0.16)",
-            line_width=0,
-            layer="below",
+    if has_predicted:
+        for segment_dates, segment_values in _prediction_segments(values, predicted_values):
+            figure.add_trace(
+                go.Scatter(
+                    x=segment_dates,
+                    y=segment_values,
+                    mode="lines",
+                    line={"color": PREDICTED_COLOR, "width": 2.2, "dash": "dash"},
+                    hoverinfo="skip",
+                    showlegend=False,
+                )
+            )
+        predicted_points = predicted_values.dropna()
+        figure.add_trace(
+            go.Scatter(
+                x=predicted_points.index,
+                y=predicted_points,
+                mode="markers",
+                name="Predicted (MLlib)",
+                marker={
+                    "color": PREDICTED_COLOR,
+                    "size": 7,
+                    "symbol": "diamond",
+                    "line": {"color": "#0f172a", "width": 1},
+                },
+                hovertemplate=(
+                    f"Predicted<br>%{{x|%Y-%m-%d}}<br>{aggregation.label}: "
+                    f"%{{y:{aggregation.value_format}}}{unit_suffix}<extra></extra>"
+                ),
+            )
         )
 
-    if has_data:
+    if date_index is not None:
+        for start, end in _missing_date_runs(~covered):
+            x0, x1 = _presence_vrect_bounds(covered, start, end)
+            figure.add_vrect(
+                x0=x0,
+                x1=x1,
+                fillcolor="rgba(148, 163, 184, 0.16)",
+                line_width=0,
+                layer="below",
+            )
+
+    if has_observed:
         first_observed = values.first_valid_index()
         last_observed = values.last_valid_index()
         if isinstance(first_observed, pd.Timestamp) and isinstance(last_observed, pd.Timestamp):
@@ -431,10 +545,10 @@ def build_metric_figure(
         y_title = f"{aggregation.label} ({metric_unit})"
 
     x_range = None
-    if not plot_frame.empty:
+    if date_index is not None and len(date_index):
         x_range = [
-            plot_frame.index.min() - pd.Timedelta(hours=12),
-            plot_frame.index.max() + pd.Timedelta(hours=12),
+            date_index.min() - pd.Timedelta(hours=12),
+            date_index.max() + pd.Timedelta(hours=12),
         ]
 
     figure.update_layout(
@@ -452,7 +566,7 @@ def build_metric_figure(
         font={"family": "sans serif", "size": 13, "color": "#e2e8f0"},
         hovermode="x unified",
         hoverlabel={"bgcolor": "#1e293b", "bordercolor": "#334155", "font": {"color": "#e2e8f0"}},
-        showlegend=show_band,
+        showlegend=show_legend,
         legend={
             "orientation": "h",
             "yanchor": "bottom",
@@ -491,36 +605,61 @@ def build_distribution_figure(
     metric_unit: str | None,
     color: str,
     bins: int = 20,
+    predicted_values: pd.Series | None = None,
 ) -> go.Figure:
     """Build the value-distribution histogram for one metric.
 
     Args:
-        values: Raw metric values in the selected date range.
+        values: Observed raw metric values in the selected date range.
         metric_name: Raw view metric name.
         metric_unit: Unit paired with the metric, if any.
         color: Bar colour used by the metric.
         bins: Number of equal-width histogram bins.
+        predicted_values: Optional predicted values to overlay.
 
     Returns:
         A Plotly histogram with centred title and dark-theme styling.
     """
     clean = pd.to_numeric(values, errors="coerce").dropna().to_numpy(dtype=float)
+    predicted = (
+        pd.to_numeric(predicted_values, errors="coerce").dropna().to_numpy(dtype=float)
+        if predicted_values is not None
+        else np.array([], dtype=float)
+    )
+    combined = np.concatenate([clean, predicted]) if clean.size or predicted.size else np.array([], dtype=float)
     unit_suffix = f" {metric_unit}" if metric_unit else ""
     figure = go.Figure()
-    if clean.size:
-        counts, boundaries = np.histogram(clean, bins=bins)
+    if combined.size:
+        _, boundaries = np.histogram(combined, bins=bins)
         centers = (boundaries[:-1] + boundaries[1:]) / 2
         widths = np.diff(boundaries)
-        figure.add_trace(
-            go.Bar(
-                x=centers,
-                y=counts,
-                width=widths * 0.92,
-                marker={"color": _rgba(color, 0.65), "line": {"color": color, "width": 0.5}},
-                hovertemplate=(f"Value: %{{x:.4g}}{unit_suffix}<br>Count: %{{y:,}}<extra></extra>"),
-                showlegend=False,
+        if clean.size:
+            counts, _ = np.histogram(clean, bins=boundaries)
+            figure.add_trace(
+                go.Bar(
+                    x=centers,
+                    y=counts,
+                    width=widths * 0.92,
+                    marker={"color": _rgba(color, 0.65), "line": {"color": color, "width": 0.5}},
+                    name="Observed",
+                    hovertemplate=(f"Observed: %{{x:.4g}}{unit_suffix}<br>Count: %{{y:,}}<extra></extra>"),
+                )
             )
-        )
+        if predicted.size:
+            counts, _ = np.histogram(predicted, bins=boundaries)
+            figure.add_trace(
+                go.Bar(
+                    x=centers,
+                    y=counts,
+                    width=widths * 0.92,
+                    marker={
+                        "color": _rgba(PREDICTED_COLOR, 0.55),
+                        "line": {"color": PREDICTED_COLOR, "width": 0.5},
+                    },
+                    name="Predicted (MLlib)",
+                    hovertemplate=(f"Predicted: %{{x:.4g}}{unit_suffix}<br>Count: %{{y:,}}<extra></extra>"),
+                )
+            )
     else:
         figure.add_annotation(
             text="No values in this range",
@@ -546,8 +685,17 @@ def build_distribution_figure(
         plot_bgcolor="rgba(0,0,0,0)",
         font={"family": "sans serif", "size": 13, "color": "#e2e8f0"},
         hoverlabel={"bgcolor": "#1e293b", "bordercolor": "#334155", "font": {"color": "#e2e8f0"}},
-        showlegend=False,
+        showlegend=bool(predicted.size),
+        legend={
+            "orientation": "h",
+            "yanchor": "bottom",
+            "y": 1.02,
+            "x": 0,
+            "bgcolor": "rgba(0,0,0,0)",
+            "font": {"color": "#e2e8f0"},
+        },
         bargap=0.05,
+        barmode="overlay",
         modebar={"bgcolor": "rgba(0,0,0,0)", "color": "#94a3b8", "activecolor": "#2dd4bf"},
     )
     figure.update_xaxes(
@@ -592,7 +740,7 @@ def render_dashboard(config: DashboardConfig) -> None:
         st.info(f"No {config.description} are available in the view yet.")
         return
 
-    range_column, statistic_column = st.columns([2, 1])
+    range_column, statistic_column, prediction_column = st.columns([2, 1, 1])
     date_range = range_column.date_input(
         "Snapshot range",
         value=bounds,
@@ -608,6 +756,13 @@ def render_dashboard(config: DashboardConfig) -> None:
         help=(
             "Mean, Median, Maximum and Total aggregate every recorded value. "
             "Observations counts every row in the snapshot."
+        ),
+    )
+    show_predictions = prediction_column.checkbox(
+        "Show predicted values",
+        value=True,
+        help=(
+            "Overlay MLlib predictions for dates with no observed value. Predictions are not counted as observations."
         ),
     )
 
@@ -645,25 +800,38 @@ def render_dashboard(config: DashboardConfig) -> None:
 
     aggregation = AGGREGATIONS[aggregation_key]
     _render_summary(frame)
+    coverage_note = (
+        "shaded areas mark dates without observations or predictions"
+        if show_predictions
+        else "shaded areas mark missing observations"
+    )
     st.caption(
         f"{aggregation.description} · timelines span the selected dates · "
-        "shaded areas mark missing observations · histograms show all values in the range · "
+        f"{coverage_note} · histograms show all values in the range · "
         f"source `{config.view_name}`"
     )
+    if frame["is_predicted"].any():
+        st.caption(
+            "Predicted values are PySpark MLlib estimates for missing dates, not observations. "
+            "Use **Show predicted values** to hide them."
+        )
     if config.note and config.note_metric in set(frame["metric_name"]):
         st.caption(config.note)
-    _render_charts(frame, distribution, aggregation, start_date, end_date)
+    _render_charts(frame, distribution, aggregation, start_date, end_date, show_predictions)
     _render_data(config, frame)
 
 
 def _render_summary(frame: pd.DataFrame) -> None:
-    """Render the snapshot, metric, observation and latest-date KPIs."""
+    """Render snapshot, metric, observation, prediction and latest-date KPIs."""
     latest = frame["file_date"].max().date()
-    columns = st.columns(4)
-    columns[0].metric("Snapshots", f"{frame['file_date'].nunique():,}")
+    observed = frame[~frame["is_predicted"]]
+    predicted = frame[frame["is_predicted"]]
+    columns = st.columns(5)
+    columns[0].metric("Snapshots", f"{observed['file_date'].nunique():,}")
     columns[1].metric("Metrics", f"{len(metric_groups(frame)):,}")
-    columns[2].metric("Observations", f"{int(frame['observation_count'].sum()):,}")
-    columns[3].metric("Latest snapshot", latest.isoformat())
+    columns[2].metric("Observations", f"{int(observed['observation_count'].sum()):,}")
+    columns[3].metric("Predicted dates", f"{predicted['file_date'].nunique():,}")
+    columns[4].metric("Latest snapshot", latest.isoformat())
 
 
 def _render_charts(
@@ -672,6 +840,7 @@ def _render_charts(
     aggregation: Aggregation,
     start_date: dt.date,
     end_date: dt.date,
+    show_predictions: bool,
 ) -> None:
     """Render a timeline and value histogram for each distinct metric."""
     date_index = pd.date_range(start_date, end_date, freq="D")
@@ -687,25 +856,36 @@ def _render_charts(
             aggregation=aggregation,
             color=color,
             date_index=date_index,
+            show_predictions=show_predictions,
         )
         distribution_frame = distribution[
             (distribution["metric_name"] == metric_name)
             & (distribution["metric_unit"].fillna("") == (metric_unit or ""))
         ]
-        distribution_values = (
-            distribution_frame["metric_value"] if not distribution_frame.empty else pd.Series(dtype="float64")
+        observed_values = (
+            distribution_frame.loc[~distribution_frame["is_predicted"], "metric_value"]
+            if not distribution_frame.empty
+            else pd.Series(dtype="float64")
+        )
+        predicted_values = (
+            distribution_frame.loc[distribution_frame["is_predicted"], "metric_value"]
+            if show_predictions and not distribution_frame.empty
+            else pd.Series(dtype="float64")
         )
         distribution_figure = build_distribution_figure(
-            distribution_values,
+            observed_values,
             metric_name=metric_name,
             metric_unit=metric_unit,
             color=color,
+            predicted_values=predicted_values,
         )
 
         timeline_column, distribution_column = st.columns([2, 1])
         with timeline_column:
             st.plotly_chart(timeline_figure, width="stretch", key=f"metric-timeline-{index}")
-            missing_caption = format_missing_runs(missing_observation_runs(metric_frame, date_index))
+            missing_caption = format_missing_runs(
+                missing_value_runs(metric_frame, date_index, include_predicted=show_predictions)
+            )
             if missing_caption:
                 st.caption(missing_caption)
         with distribution_column:
@@ -722,6 +902,8 @@ def _render_data(config: DashboardConfig, frame: pd.DataFrame) -> None:
     with st.expander("Aggregated data"):
         display = frame.copy()
         display["file_date"] = display["file_date"].dt.date
+        display["is_predicted"] = display["is_predicted"].map({True: "Predicted", False: "Observed"})
+        display = display.rename(columns={"is_predicted": "series"})
         st.dataframe(display, hide_index=True)
         st.download_button(
             "Download CSV",

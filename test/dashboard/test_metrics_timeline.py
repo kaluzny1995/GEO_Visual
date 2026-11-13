@@ -13,6 +13,7 @@ def sample_frame() -> pd.DataFrame:
             "file_date": pd.to_datetime(["2026-11-01", "2026-11-02"]),
             "metric_name": ["danger_level", "danger_level"],
             "metric_unit": ["NAPADS level", "NAPADS level"],
+            "is_predicted": [False, False],
             "observation_count": [10, 12],
             "mean_value": [1.5, 2.0],
             "median_value": [1.5, 1.75],
@@ -21,6 +22,22 @@ def sample_frame() -> pd.DataFrame:
             "sum_value": [6.0, 12.0],
         }
     )
+
+
+def predicted_frame() -> pd.DataFrame:
+    """Two observed snapshots plus two predicted gap snapshots for one metric."""
+    observed = sample_frame()
+    predicted = observed.iloc[[0, 1]].assign(
+        file_date=pd.to_datetime(["2026-11-03", "2026-11-04"]),
+        is_predicted=True,
+        observation_count=1,
+        mean_value=[2.5, 3.0],
+        median_value=[2.5, 3.0],
+        max_value=[2.5, 3.0],
+        min_value=[2.5, 3.0],
+        sum_value=[2.5, 3.0],
+    )
+    return pd.concat([observed, predicted], ignore_index=True)
 
 
 class TestMetricGroups:
@@ -108,7 +125,7 @@ class TestBuildMetricFigure:
             assert band.name == "Observed min-max"
             assert len(band.x) == 4
             assert figure.data[-1].mode == "lines+markers"
-            assert figure.data[-1].name == "Mean"
+            assert figure.data[-1].name == "Observed"
             assert figure.layout.title.text == "Danger Level (NAPADS level) · Mean"
             assert figure.layout.font.color == "#e2e8f0"
 
@@ -245,6 +262,66 @@ class TestBuildMetricFigure:
 
         assert list(figure.data[-1].y) == [-1.0, 2.0]
 
+    def test_predicted_values_get_a_distinct_dashed_series_and_legend(self) -> None:
+        """Predicted rows are drawn with the amber-pink dashed style and a legend."""
+        figure = timeline.build_metric_figure(
+            predicted_frame(),
+            metric_name="danger_level",
+            metric_unit="NAPADS level",
+            aggregation=timeline.AGGREGATIONS["mean"],
+            color="#2dd4bf",
+            date_index=pd.date_range("2026-11-01", "2026-11-04", freq="D"),
+        )
+
+        names = [trace.name for trace in figure.data]
+        assert "Observed" in names
+        assert "Predicted (MLlib)" in names
+        predicted_markers = next(trace for trace in figure.data if trace.name == "Predicted (MLlib)")
+        assert list(predicted_markers.x) == list(pd.to_datetime(["2026-11-03", "2026-11-04"]))
+        dashed = [trace for trace in figure.data if getattr(trace.line, "dash", None) == "dash"]
+        assert dashed
+        assert all(trace.line.color == timeline.PREDICTED_COLOR for trace in dashed)
+        assert figure.layout.showlegend is True
+
+    def test_hiding_predictions_removes_their_traces(self) -> None:
+        """The show-predictions toggle removes predicted markers and dashed lines."""
+        figure = timeline.build_metric_figure(
+            predicted_frame(),
+            metric_name="danger_level",
+            metric_unit="NAPADS level",
+            aggregation=timeline.AGGREGATIONS["mean"],
+            color="#2dd4bf",
+            date_index=pd.date_range("2026-11-01", "2026-11-04", freq="D"),
+            show_predictions=False,
+        )
+
+        assert "Predicted (MLlib)" not in [trace.name for trace in figure.data]
+        assert not any(getattr(trace.line, "dash", None) == "dash" for trace in figure.data)
+
+    def test_predicted_dates_cover_missing_shading(self) -> None:
+        """Dates covered by predictions are not shaded as missing."""
+        frame = predicted_frame()
+        date_index = pd.date_range("2026-11-01", "2026-11-04", freq="D")
+
+        assert timeline.missing_value_runs(frame, date_index, include_predicted=True) == []
+        assert timeline.missing_value_runs(frame, date_index, include_predicted=False) == [
+            (pd.Timestamp("2026-11-03"), pd.Timestamp("2026-11-04"))
+        ]
+
+    def test_observations_statistic_never_includes_predictions(self) -> None:
+        """Predicted rows cannot inflate the Observations statistic."""
+        figure = timeline.build_metric_figure(
+            predicted_frame(),
+            metric_name="danger_level",
+            metric_unit="NAPADS level",
+            aggregation=timeline.AGGREGATIONS["count"],
+            color="#2dd4bf",
+            date_index=pd.date_range("2026-11-01", "2026-11-04", freq="D"),
+            show_predictions=True,
+        )
+
+        assert "Predicted (MLlib)" not in [trace.name for trace in figure.data]
+
     def test_missing_days_break_the_line(self) -> None:
         """A day without a snapshot becomes a gap, not a straight interpolation."""
         frame = sample_frame()
@@ -301,6 +378,24 @@ def test_distribution_figure_has_value_bars() -> None:
     assert figure.layout.xaxis.title.text == "Value (km²)"
     assert figure.layout.title.x == 0.5
     assert figure.layout.yaxis.title.text == "Count"
+
+
+def test_distribution_figure_overlays_predicted_values() -> None:
+    """Predicted values get their own histogram series and legend entry."""
+    figure = timeline.build_distribution_figure(
+        pd.Series([1.0, 2.0, 3.0]),
+        predicted_values=pd.Series([4.0, 5.0]),
+        metric_name="area",
+        metric_unit="km²",
+        color="#2dd4bf",
+    )
+
+    names = [trace.name for trace in figure.data]
+    assert names == ["Observed", "Predicted (MLlib)"]
+    assert sum(figure.data[0].y) == 3
+    assert sum(figure.data[1].y) == 2
+    assert figure.layout.showlegend is True
+    assert figure.data[1].marker.line.color == timeline.PREDICTED_COLOR
 
 
 def test_distribution_figure_handles_an_empty_range() -> None:

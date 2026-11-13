@@ -37,6 +37,7 @@ def sample_frame() -> pd.DataFrame:
             "file_date": pd.to_datetime(["2026-11-01", "2026-11-02"]),
             "metric_name": ["area", "area"],
             "metric_unit": ["km²", "km²"],
+            "is_predicted": [False, False],
             "observation_count": [10, 12],
             "mean_value": [1.5, 2.0],
             "median_value": [1.5, 1.75],
@@ -194,6 +195,7 @@ class TestLoadMetricDistribution:
             {
                 "metric_name": ["area", "area", "area"],
                 "metric_unit": ["km²", "km²", "km²"],
+                "is_predicted": [False, False, False],
                 "metric_value": [1.0, 2.0, 3.0],
             }
         )
@@ -234,6 +236,7 @@ def test_filters_hidden_metric_series() -> None:
         {
             "metric_name": ["magnitude", "magnitude", "depth"],
             "metric_unit": ["Mw", "mlr", "km"],
+            "is_predicted": [False, False, False],
             "metric_value": [4.5, 3.2, 10.0],
         }
     )

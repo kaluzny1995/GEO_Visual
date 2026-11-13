@@ -5,8 +5,9 @@
 --   :end_date    last snapshot date to include (inclusive)
 SELECT metric_name,
        metric_unit,
+       is_predicted,
        metric_value
 FROM {view_name}
 WHERE file_date >= CAST(:start_date AS date)
   AND file_date < CAST(:end_date AS date) + INTERVAL '1 day'
-ORDER BY metric_name, metric_unit;
+ORDER BY metric_name, metric_unit, is_predicted;

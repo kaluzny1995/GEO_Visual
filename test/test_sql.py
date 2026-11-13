@@ -43,6 +43,7 @@ SQL_FILE_CASES += [
             ":start_date",
             ":end_date",
             "GROUP BY file_date",
+            "is_predicted",
             "percentile_cont(0.5)",
             config.view_name,
         ),
@@ -55,7 +56,7 @@ SQL_FILE_CASES += [
 SQL_FILE_CASES += [
     pytest.param(
         "metrics_distribution",
-        ("{view_name}", ":start_date", ":end_date", "metric_value", "SELECT"),
+        ("{view_name}", ":start_date", ":end_date", "is_predicted", "metric_value", "SELECT"),
         id="distribution",
     ),
     pytest.param(
