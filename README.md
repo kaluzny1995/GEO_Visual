@@ -181,6 +181,12 @@ See [Setup, configuration and development](docs/setup.md) for the repository lay
 prerequisites, quick start, Docker deployment, `config.json`, performance guardrails,
 tox environments and the test suite.
 
+The 2026-11-23 host-memory investigation, the Streamlit rerun stress test and the
+engine-close fix are in
+[Memory leaks investigation 2026-11-23](docs/memory-leaks-investigation-2026-11-23.md).
+The 2026-11-24 follow-up (stable dashboard container, desktop growth) is in
+[Memory leaks investigation 2026-11-24](docs/memory-leaks-investigation-2026-11-24.md).
+
 ## Related Projects
 
 GEO_Visual is one layer of the GIS data pipeline. The projects sit as siblings under

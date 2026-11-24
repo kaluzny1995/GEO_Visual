@@ -89,3 +89,40 @@ class TestCachedQuery:
             {"source": "usgs"},
             max_rows=10,
         )
+
+
+class TestClearConnectionCache:
+    """Tests for :func:`clear_connection_cache`."""
+
+    def test_closes_the_cached_provider_before_clearing_the_cache(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A recheck disposes the old engine instead of orphaning its connection pool."""
+        # Arrange
+        provider = MagicMock()
+        cache = MagicMock()
+        monkeypatch.setattr(database, "_PROVIDER", provider)
+        monkeypatch.setattr(database, "get_provider", cache)
+        monkeypatch.setattr(database, "cached_connection_status", MagicMock())
+        monkeypatch.setattr(database, "cached_query", MagicMock())
+
+        # Act
+        database.clear_connection_cache()
+
+        # Assert
+        provider.close.assert_called_once_with()
+        cache.clear.assert_called_once_with()
+        assert database._PROVIDER is None
+
+    def test_is_a_noop_without_a_cached_provider(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Clearing before the first query never constructs a provider just to close it."""
+        # Arrange
+        cache = MagicMock()
+        monkeypatch.setattr(database, "_PROVIDER", None)
+        monkeypatch.setattr(database, "get_provider", cache)
+        monkeypatch.setattr(database, "cached_connection_status", MagicMock())
+        monkeypatch.setattr(database, "cached_query", MagicMock())
+
+        # Act
+        database.clear_connection_cache()
+
+        # Assert
+        cache.clear.assert_called_once_with()

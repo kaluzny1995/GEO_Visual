@@ -1,5 +1,9 @@
 # Performance and data-access architecture
 
+The 2026-11-23 host-memory investigation, the Streamlit rerun stress test and
+the provider-close fix on cache clearing are in
+[Memory leaks investigation 2026-11-23](memory-leaks-investigation-2026-11-23.md).
+
 ## Decision: direct Supabase Postgres
 
 GEO_Visual reads directly from Supabase Postgres through the connection pooler.

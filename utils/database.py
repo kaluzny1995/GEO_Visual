@@ -19,6 +19,12 @@ DB_CONFIG = AppConfig.from_json().database
 # How long the welcome page reuses a connection check before probing again.
 STATUS_TTL_SECONDS = DB_CONFIG.connection_status_ttl_seconds
 
+# The cached provider instance, kept so clear_connection_cache() can close its
+# engine pool before Streamlit drops the cache entry. Without this, every
+# "Recheck connection" click would orphan an engine with up to
+# pool_size + max_overflow open connections.
+_PROVIDER: SupabasePostgresProvider | None = None
+
 
 @dataclass(frozen=True)
 class ConnectionStatus:
@@ -43,7 +49,8 @@ def get_provider() -> SupabasePostgresProvider:
     Returns:
         The shared :class:`SupabasePostgresProvider`.
     """
-    return SupabasePostgresProvider(
+    global _PROVIDER
+    _PROVIDER = SupabasePostgresProvider(
         connect_timeout=DB_CONFIG.connect_timeout,
         pool_size=DB_CONFIG.pool_size,
         max_overflow=DB_CONFIG.max_overflow,
@@ -51,6 +58,7 @@ def get_provider() -> SupabasePostgresProvider:
         max_rows=DB_CONFIG.max_rows,
         statement_timeout_ms=DB_CONFIG.statement_timeout_ms,
     )
+    return _PROVIDER
 
 
 def check_connection() -> ConnectionStatus:
@@ -126,8 +134,19 @@ def clear_connection_cache() -> None:
     """Drop the cached provider, connection status and query results.
 
     Called by the sidebar's "Recheck connection" button so a corrected
-    ``.env`` is picked up without restarting Streamlit.
+    ``.env`` is picked up without restarting Streamlit. The provider's engine
+    is closed first: clearing the Streamlit cache alone would leave its
+    connection pool (``pool_size + max_overflow`` sockets) open until the
+    process exits, leaking one pool per recheck.
     """
+    global _PROVIDER
+    if _PROVIDER is not None:
+        try:
+            _PROVIDER.close()
+        except Exception as exc:  # UI cleanup: a failed dispose must not block the recheck
+            logger.warning("Could not dispose the Supabase engine: %s", exc)
+        finally:
+            _PROVIDER = None
     get_provider.clear()
     cached_connection_status.clear()
     cached_query.clear()
